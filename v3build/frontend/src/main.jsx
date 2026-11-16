@@ -1,29 +1,33 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
 import {
   Activity,
   ArrowRight,
   BarChart3,
   Bell,
-  Brain,
+  Bot,
+  BriefcaseBusiness,
   Building2,
   CalendarDays,
   Check,
-  CheckCircle2,
   ChevronDown,
+  ChevronRight,
+  CircleHelp,
   Clock3,
+  Command,
+  Database,
   ExternalLink,
   Filter,
-  HardDrive,
+  Globe2,
   LayoutDashboard,
+  LifeBuoy,
+  Link2,
   Mail,
   Menu,
   MessageSquare,
+  MoreHorizontal,
   Pause,
-  Phone,
   Play,
   Plus,
-  Plug,
   RefreshCw,
   Search,
   Send,
@@ -31,2633 +35,2873 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  Trash2,
+  UserRound,
   Users,
   X,
   Zap
 } from "lucide-react";
-import "./styles.css";
 
-const API = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
-const WORKSPACE_ID = 1;
+const API =
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
+const WS = 1;
+
+const ORANGE = "#FF5A1F";
 
 const NAV = [
-  ["Overview", LayoutDashboard],
-  ["Prospects", Users],
-  ["Companies", Building2],
-  ["Intent Signals", Zap],
-  ["Campaigns", Send],
-  ["Conversations", MessageSquare],
-  ["Calls", Phone],
-  ["Meetings", CalendarDays],
-  ["Analytics", BarChart3]
+  {
+    label: "Workspace",
+    items: [
+      { id: "overview", label: "Overview", icon: LayoutDashboard },
+      { id: "prospects", label: "Prospects", icon: Users },
+      { id: "companies", label: "Companies", icon: Building2 },
+      { id: "intent", label: "Intent signals", icon: Target }
+    ]
+  },
+  {
+    label: "Outbound",
+    items: [
+      { id: "campaigns", label: "Campaigns", icon: Send },
+      { id: "conversations", label: "Conversations", icon: MessageSquare },
+      { id: "meetings", label: "Meetings", icon: CalendarDays }
+    ]
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { id: "activity", label: "AI activity", icon: Activity },
+      { id: "analytics", label: "Analytics", icon: BarChart3 }
+    ]
+  },
+  {
+    label: "System",
+    items: [
+      { id: "integrations", label: "Integrations", icon: Link2 },
+      { id: "automation", label: "Automation", icon: Zap },
+      { id: "settings", label: "Settings", icon: Settings }
+    ]
+  }
 ];
 
-const CATEGORIES = {
+const PROVIDER_LOGOS = {
+  gmail: "https://cdn.simpleicons.org/gmail",
+  google_workspace: "https://cdn.simpleicons.org/google",
+  google_calendar: "https://cdn.simpleicons.org/googlecalendar",
+  google_drive: "https://cdn.simpleicons.org/googledrive",
+  outlook: "https://cdn.simpleicons.org/microsoftoutlook",
+  microsoft_365: "https://cdn.simpleicons.org/microsoft",
+  outlook_calendar: "https://cdn.simpleicons.org/microsoftoutlook",
+  resend: "https://cdn.simpleicons.org/resend",
+  sendgrid: "https://cdn.simpleicons.org/twilio",
+  mailgun: "https://cdn.simpleicons.org/mailgun",
+  hubspot: "https://cdn.simpleicons.org/hubspot",
+  salesforce: "https://cdn.simpleicons.org/salesforce",
+  pipedrive: "https://cdn.simpleicons.org/pipedrive",
+  zoho: "https://cdn.simpleicons.org/zoho",
+  calendly: "https://cdn.simpleicons.org/calendly",
+  calcom: "https://cdn.simpleicons.org/caldotcom",
+  twilio: "https://cdn.simpleicons.org/twilio",
+  exotel: "https://cdn.simpleicons.org/exotel",
+  whatsapp: "https://cdn.simpleicons.org/whatsapp",
+  openai: "https://cdn.simpleicons.org/openai",
+  anthropic: "https://cdn.simpleicons.org/anthropic",
+  gemini: "https://cdn.simpleicons.org/googlegemini",
+  openrouter: "https://cdn.simpleicons.org/openrouter",
+  apollo: "https://cdn.simpleicons.org/apollo",
+  hunter: "https://cdn.simpleicons.org/hunter",
+  crunchbase: "https://cdn.simpleicons.org/crunchbase",
+  slack: "https://cdn.simpleicons.org/slack",
+  microsoft_teams: "https://cdn.simpleicons.org/microsoftteams",
+  dropbox: "https://cdn.simpleicons.org/dropbox",
+  onedrive: "https://cdn.simpleicons.org/microsoftonedrive"
+};
+
+const PROVIDER_DESCRIPTIONS = {
+  gmail:
+    "Send personalized outreach, read replies and automatically manage conversations.",
+  google_workspace:
+    "Connect your Google Workspace account for email and productivity workflows.",
+  google_calendar:
+    "Use Google Calendar for meeting availability and scheduling workflows.",
+  outlook:
+    "Connect Microsoft Outlook for email sending, replies and mailbox activity.",
+  microsoft_365:
+    "Connect Microsoft 365 for enterprise email and productivity workflows.",
+  calendly:
+    "Turn booked meetings into automatic campaign and CRM updates.",
+  hubspot:
+    "Sync prospects, contacts, companies and campaign activity with HubSpot.",
+  salesforce:
+    "Push qualified prospects and activity into Salesforce.",
+  pipedrive:
+    "Keep prospect and deal activity synchronized with Pipedrive.",
+  openai:
+    "Power SignalOS research, scoring, personalization and AI agents.",
+  anthropic:
+    "Use Claude for prospect research, reasoning and personalization.",
+  hunter:
+    "Find and verify professional contact information.",
+  apollo:
+    "Use Apollo data and enrichment capabilities inside SignalOS.",
+  twilio:
+    "Enable communication workflows and future voice capabilities.",
+  whatsapp:
+    "Connect WhatsApp Business for supported messaging workflows."
+};
+
+const CATEGORY_LABELS = {
+  all: "All",
   email: "Email",
   calendar: "Calendar",
   crm: "CRM",
   ai: "AI",
-  data: "Data & Enrichment",
+  data: "Data & enrichment",
   voice: "Voice",
   messaging: "Messaging",
   storage: "Storage",
   notifications: "Notifications"
 };
 
-const ICONS = {
-  email: Mail,
-  calendar: CalendarDays,
-  crm: Building2,
-  ai: Brain,
-  data: Search,
-  voice: Phone,
-  messaging: MessageSquare,
-  storage: HardDrive,
-  notifications: Bell
-};
-
-const SIGNALS = [
-  "Funding / capital raised",
-  "Relevant hiring",
-  "Expansion / new market",
-  "Product launch",
-  "Public buying request",
-  "Technology change",
-  "Leadership change",
-  "New website / product",
-  "Competitor change",
-  "Technology adoption"
-];
-
 async function api(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
-    ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {})
-    }
+    },
+    ...options
   });
 
   const text = await response.text();
 
-  let data = {};
+  let data = null;
+
   try {
-    data = text ? JSON.parse(text) : {};
+    data = text ? JSON.parse(text) : null;
   } catch {
-    data = { message: text };
+    data = text;
   }
 
   if (!response.ok) {
     throw new Error(
-      data.detail ||
-      data.message ||
-      `Request failed (${response.status})`
+      data?.detail ||
+        data?.message ||
+        `Request failed with status ${response.status}`
     );
   }
 
   return data;
 }
 
-function Badge({ children, tone = "" }) {
-  return <span className={`badge ${tone}`}>{children}</span>;
+function providerKey(provider) {
+  return (
+    provider.id ||
+    provider.provider_id ||
+    provider.slug ||
+    provider.name?.toLowerCase().replace(/\s+/g, "_")
+  );
 }
 
-function PageHeader({
-  eyebrow,
+function providerLogo(provider) {
+  const key = providerKey(provider);
+
+  return (
+    provider.logo_url ||
+    provider.logo ||
+    PROVIDER_LOGOS[key] ||
+    `https://cdn.simpleicons.org/${key}`
+  );
+}
+
+function formatProviderName(provider) {
+  return (
+    provider.name ||
+    provider.display_name ||
+    provider.label ||
+    provider.id
+  );
+}
+
+function normalizedStatus(provider) {
+  const status = String(
+    provider.status ||
+      provider.connection_status ||
+      provider.connector_status ||
+      ""
+  ).toLowerCase();
+
+  if (
+    status === "connected" ||
+    status === "active" ||
+    provider.connected === true
+  ) {
+    return "connected";
+  }
+
+  if (
+    status === "disabled" ||
+    provider.enabled === false
+  ) {
+    return "disabled";
+  }
+
+  return "available";
+}
+
+function Logo({ provider, size = 42 }) {
+  const [failed, setFailed] = useState(false);
+
+  const name = formatProviderName(provider);
+  const letters = name
+    ? name
+        .split(" ")
+        .map((x) => x[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "?";
+
+  return (
+    <div
+      className="provider-logo"
+      style={{ width: size, height: size }}
+    >
+      {!failed ? (
+        <img
+          src={providerLogo(provider)}
+          alt={name}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span>{letters}</span>
+      )}
+    </div>
+  );
+}
+
+function Badge({ children, tone = "neutral" }) {
+  return (
+    <span className={`badge badge-${tone}`}>
+      {children}
+    </span>
+  );
+}
+
+function Button({
+  children,
+  variant = "primary",
+  size = "md",
+  loading = false,
+  disabled = false,
+  icon,
+  onClick,
+  type = "button"
+}) {
+  return (
+    <button
+      type={type}
+      className={`btn btn-${variant} btn-${size}`}
+      disabled={disabled || loading}
+      onClick={onClick}
+    >
+      {loading ? (
+        <RefreshCw size={16} className="spin" />
+      ) : (
+        icon
+      )}
+      <span>{children}</span>
+    </button>
+  );
+}
+
+function EmptyState({
+  icon: Icon = Sparkles,
   title,
   description,
   action
 }) {
   return (
-    <div className="pageHeader">
-      <div>
-        <div className="eyebrow">{eyebrow}</div>
-        <h1>{title}</h1>
-        <p>{description}</p>
+    <div className="empty-state">
+      <div className="empty-icon">
+        <Icon size={22} />
       </div>
+
+      <h3>{title}</h3>
+
+      <p>{description}</p>
 
       {action}
     </div>
   );
 }
 
-function EmptyState({
-  title,
-  text,
-  button,
-  onClick
-}) {
+function Toggle({ checked, onChange, disabled = false }) {
   return (
-    <div className="empty">
-      <Sparkles size={25} />
-
-      <div className="eyebrow">
-        SIGNALOS
-      </div>
-
-      <h2>{title}</h2>
-
-      <p>{text}</p>
-
-      {button && (
-        <button
-          className="btn primary"
-          onClick={onClick}
-        >
-          <Plus size={15} />
-          {button}
-        </button>
-      )}
-    </div>
+    <button
+      className={`toggle ${checked ? "toggle-on" : ""}`}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      aria-label={checked ? "Disable" : "Enable"}
+    >
+      <span />
+    </button>
   );
 }
 
-function Stat({
-  icon: Icon,
-  label,
-  value,
-  sub
-}) {
-  return (
-    <div className="stat">
-      <div className="statIcon">
-        <Icon size={17} />
-      </div>
+function App() {
+  const [page, setPage] = useState("overview");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{sub}</small>
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------
-   ONBOARDING
-------------------------------------------------------- */
-
-function Onboarding({ onFinish }) {
-  const [step, setStep] = useState(0);
-
-  const slides = [
-    {
-      title: "Welcome to SignalOS",
-      text:
-        "Your AI revenue operating system. Find prospects with a reason to buy, prove why now, and control every outbound action.",
-      label: "Overview"
-    },
-    {
-      title: "Build your prospect engine",
-      text:
-        "Configure your ICP, intent signals, countries, industries and decision makers. SignalOS uses these rules to rank opportunities.",
-      label: "Prospects & Intent"
-    },
-    {
-      title: "Connect your tools",
-      text:
-        "Connect the platforms your team already uses. You control which providers are connected and which automations are enabled.",
-      label: "Integrations"
-    },
-    {
-      title: "Launch controlled outbound",
-      text:
-        "Create campaigns, choose your AI autonomy level, review evidence and activate only when you are ready.",
-      label: "Campaigns"
-    },
-    {
-      title: "Stay in control",
-      text:
-        "Pause automation globally, disable individual integrations and keep opt-outs inside your suppression layer.",
-      label: "Automation & Safety"
-    }
-  ];
-
-  const current = slides[step];
-
-  return (
-    <div className="tourOverlay">
-      <div className="tourCard">
-
-        <div className="tourTop">
-          <Badge tone="green">
-            QUICK TOUR
-          </Badge>
-
-          <button
-            className="close"
-            onClick={onFinish}
-          >
-            <X />
-          </button>
-        </div>
-
-        <div className="tourIcon">
-          <Sparkles size={25} />
-        </div>
-
-        <div className="tourProgress">
-          {slides.map((_, index) => (
-            <span
-              key={index}
-              className={index <= step ? "on" : ""}
-            />
-          ))}
-        </div>
-
-        <div className="eyebrow">
-          STEP {step + 1} OF {slides.length}
-        </div>
-
-        <h2>{current.title}</h2>
-
-        <p>{current.text}</p>
-
-        <div className="tourHint">
-          <CheckCircle2 size={17} />
-          <span>{current.label}</span>
-        </div>
-
-        <div className="tourActions">
-
-          {step > 0 && (
-            <button
-              className="btn secondary"
-              onClick={() => setStep(step - 1)}
-            >
-              Back
-            </button>
-          )}
-
-          <button
-            className="btn ghost"
-            onClick={onFinish}
-          >
-            Skip tour
-          </button>
-
-          {step < slides.length - 1 ? (
-            <button
-              className="btn primary"
-              onClick={() => setStep(step + 1)}
-            >
-              Next
-              <ArrowRight size={15} />
-            </button>
-          ) : (
-            <button
-              className="btn primary"
-              onClick={onFinish}
-            >
-              Finish
-              <Check size={15} />
-            </button>
-          )}
-
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------
-   SETUP PANEL
-------------------------------------------------------- */
-
-function SetupPanel({ onGo }) {
-  return (
-    <div className="setupPanel">
-
-      <div>
-        <div className="eyebrow">
-          GET STARTED
-        </div>
-
-        <h2>
-          Complete your SignalOS setup
-        </h2>
-
-        <p>
-          Connect your tools, define your ICP and
-          create your first campaign. You can skip
-          anything and return later.
-        </p>
-      </div>
-
-      <div className="setupSteps">
-
-        <button onClick={() => onGo("Integrations")}>
-          <Plug size={16} />
-
-          <span>
-            <b>Connect platforms</b>
-            <small>
-              Email, CRM, calendar and AI
-            </small>
-          </span>
-
-          <ArrowRight size={15} />
-        </button>
-
-        <button onClick={() => onGo("Prospects")}>
-          <Target size={16} />
-
-          <span>
-            <b>Define prospecting</b>
-            <small>
-              ICP and intent signals
-            </small>
-          </span>
-
-          <ArrowRight size={15} />
-        </button>
-
-        <button onClick={() => onGo("Campaigns")}>
-          <Send size={16} />
-
-          <span>
-            <b>Create campaign</b>
-            <small>
-              Start with Copilot mode
-            </small>
-          </span>
-
-          <ArrowRight size={15} />
-        </button>
-
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------
-   OVERVIEW
-------------------------------------------------------- */
-
-function Overview({ go }) {
+  const [workspace, setWorkspace] = useState(null);
   const [dashboard, setDashboard] = useState(null);
+  const [prospects, setProspects] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
+  const [providers, setProviders] = useState([]);
 
-  useEffect(() => {
-    api(`/workspaces/${WORKSPACE_ID}/dashboard`)
-      .then(setDashboard)
-      .catch(() => {});
-  }, []);
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="COMMAND CENTER"
-        title="Your revenue engine, under control"
-        description="Find the right people, understand why now, start the conversation and stop when the handoff is ready."
-        action={
-          <button
-            className="btn primary"
-            onClick={() => go("Campaigns")}
-          >
-            <Plus size={15} />
-            New campaign
-          </button>
-        }
-      />
-
-      <div className="stats">
-
-        <Stat
-          icon={Target}
-          label="Prospects"
-          value={dashboard?.prospects ?? "—"}
-          sub="Live database"
-        />
-
-        <Stat
-          icon={CheckCircle2}
-          label="Evidence"
-          value={dashboard?.evidence ?? "—"}
-          sub="Intent evidence"
-        />
-
-        <Stat
-          icon={Send}
-          label="Campaigns"
-          value={dashboard?.campaigns ?? "—"}
-          sub="Workspace campaigns"
-        />
-
-        <Stat
-          icon={Activity}
-          label="Jobs"
-          value={dashboard?.jobs ?? "—"}
-          sub="Automation jobs"
-        />
-
-      </div>
-
-      <SetupPanel onGo={go} />
-
-      <div className="dashboardGrid">
-
-        <div className="panel">
-
-          <div className="panelHead">
-            <div>
-              <h2>Operating loop</h2>
-              <span>
-                The SignalOS prospecting workflow
-              </span>
-            </div>
-
-            <Badge tone="green">
-              LIVE
-            </Badge>
-          </div>
-
-          <div className="loop">
-
-            {[
-              "Discover",
-              "Detect intent",
-              "Enrich",
-              "Score",
-              "Personalize",
-              "Contact",
-              "Qualify",
-              "Book",
-              "Stop"
-            ].map((item, index) => (
-              <div key={item}>
-                <span>
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-
-                <b>{item}</b>
-
-                {index < 8 && (
-                  <ArrowRight size={13} />
-                )}
-              </div>
-            ))}
-
-          </div>
-
-        </div>
-
-        <div className="panel">
-
-          <div className="panelHead">
-            <div>
-              <h2>AI control layer</h2>
-              <span>
-                Choose how much autonomy SignalOS has
-              </span>
-            </div>
-          </div>
-
-          <div className="controlList">
-
-            <div>
-              <Brain />
-
-              <span>
-                <b>Research Agent</b>
-                <small>
-                  Finds evidence and buying signals.
-                </small>
-              </span>
-
-              <Badge tone="green">
-                READY
-              </Badge>
-            </div>
-
-            <div>
-              <Sparkles />
-
-              <span>
-                <b>Personalization Agent</b>
-                <small>
-                  Creates evidence-led outreach.
-                </small>
-              </span>
-
-              <Badge tone="green">
-                READY
-              </Badge>
-            </div>
-
-            <div>
-              <ShieldCheck />
-
-              <span>
-                <b>Compliance Agent</b>
-                <small>
-                  Checks suppression and outreach rules.
-                </small>
-              </span>
-
-              <Badge tone="green">
-                READY
-              </Badge>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-    </>
-  );
-}
-
-/* -------------------------------------------------------
-   CAMPAIGN WIZARD
-------------------------------------------------------- */
-
-function CampaignWizard({ close, saved }) {
-
-  const [step, setStep] = useState(1);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    countries: "Worldwide",
-    industries: "",
-    company_sizes: "",
-    decision_makers:
-      "Founder, CEO, Head of Sales, Head of Marketing",
-    technologies: "",
-    keywords: "",
-    signals: [
-      "Funding / capital raised",
-      "Relevant hiring"
-    ],
-    channel: "email",
-    booking_link: "",
-    daily_limit: "25",
-    send_window: "09:00–17:00",
-    ai_autonomy: "Copilot"
-  });
-
-  const update = (key, value) => {
-    setForm((current) => ({
-      ...current,
-      [key]: value
-    }));
-  };
-
-  const toggleSignal = (signal) => {
-    update(
-      "signals",
-      form.signals.includes(signal)
-        ? form.signals.filter((item) => item !== signal)
-        : [...form.signals, signal]
-    );
-  };
-
-  const next = () => {
-
-    setError("");
-
-    if (
-      step === 1 &&
-      !form.name.trim()
-    ) {
-      setError(
-        "Campaign name is required."
-      );
-      return;
-    }
-
-    if (step < 5) {
-      setStep(step + 1);
-    }
-  };
-
-  const save = async () => {
-
-    if (!form.name.trim()) {
-      setError(
-        "Campaign name is required."
-      );
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-
-      await api(
-        `/workspaces/${WORKSPACE_ID}/campaigns`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            ...form,
-            workspace_id: WORKSPACE_ID
-          })
-        }
-      );
-
-      saved();
-      close();
-
-    } catch (error) {
-
-      setError(error.message);
-
-    } finally {
-
-      setSaving(false);
-
-    }
-  };
-
-  return (
-    <div className="overlay">
-
-      <div className="wizard">
-
-        <header className="wizardHead">
-
-          <div>
-            <div className="eyebrow">
-              CAMPAIGN BUILDER
-            </div>
-
-            <h2>
-              Build an autonomous outbound campaign
-            </h2>
-
-            <p>
-              Define who to find, why now, how to
-              contact them and how much autonomy
-              SignalOS has.
-            </p>
-          </div>
-
-          <button
-            className="close"
-            onClick={close}
-          >
-            <X />
-          </button>
-
-        </header>
-
-        <div className="wizardSteps">
-
-          {[
-            "Basics",
-            "ICP",
-            "Intent",
-            "Channels",
-            "AI & review"
-          ].map((label, index) => (
-
-            <button
-              key={label}
-              className={
-                step === index + 1
-                  ? "active"
-                  : step > index + 1
-                  ? "done"
-                  : ""
-              }
-              onClick={() => {
-                if (index + 1 < step) {
-                  setStep(index + 1);
-                }
-              }}
-            >
-
-              <span>
-                {step > index + 1 ? (
-                  <Check size={13} />
-                ) : (
-                  index + 1
-                )}
-              </span>
-
-              {label}
-
-            </button>
-
-          ))}
-
-        </div>
-
-        <div className="wizardBody">
-
-          {step === 1 && (
-            <div className="wizardGrid">
-
-              <label className="field full">
-                <span>
-                  Campaign name *
-                </span>
-
-                <input
-                  autoFocus
-                  value={form.name}
-                  onChange={(event) =>
-                    update(
-                      "name",
-                      event.target.value
-                    )
-                  }
-                  placeholder="US B2B SaaS — Support Automation"
-                />
-              </label>
-
-              <label className="field full">
-                <span>
-                  What are you selling?
-                </span>
-
-                <textarea
-                  value={form.description}
-                  onChange={(event) =>
-                    update(
-                      "description",
-                      event.target.value
-                    )
-                  }
-                  placeholder="Offer, outcome, price range, differentiator and ideal trigger."
-                />
-              </label>
-
-              <label className="field">
-                <span>Countries</span>
-
-                <input
-                  value={form.countries}
-                  onChange={(event) =>
-                    update(
-                      "countries",
-                      event.target.value
-                    )
-                  }
-                />
-              </label>
-
-              <label className="field">
-                <span>Industries</span>
-
-                <input
-                  value={form.industries}
-                  onChange={(event) =>
-                    update(
-                      "industries",
-                      event.target.value
-                    )
-                  }
-                  placeholder="SaaS, fintech, healthcare"
-                />
-              </label>
-
-              <label className="field">
-                <span>
-                  Company sizes
-                </span>
-
-                <input
-                  value={form.company_sizes}
-                  onChange={(event) =>
-                    update(
-                      "company_sizes",
-                      event.target.value
-                    )
-                  }
-                  placeholder="11–50, 51–200"
-                />
-              </label>
-
-              <label className="field">
-                <span>
-                  Technologies
-                </span>
-
-                <input
-                  value={form.technologies}
-                  onChange={(event) =>
-                    update(
-                      "technologies",
-                      event.target.value
-                    )
-                  }
-                  placeholder="HubSpot, Shopify"
-                />
-              </label>
-
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="wizardGrid">
-
-              <label className="field full">
-                <span>
-                  Decision makers
-                </span>
-
-                <input
-                  value={form.decision_makers}
-                  onChange={(event) =>
-                    update(
-                      "decision_makers",
-                      event.target.value
-                    )
-                  }
-                />
-              </label>
-
-              <label className="field full">
-                <span>
-                  Keywords / buying language
-                </span>
-
-                <textarea
-                  value={form.keywords}
-                  onChange={(event) =>
-                    update(
-                      "keywords",
-                      event.target.value
-                    )
-                  }
-                  placeholder="customer support automation, AI support, Zendesk replacement"
-                />
-              </label>
-
-              <div className="infoCard full">
-                <Target size={18} />
-
-                <div>
-                  <b>
-                    Account intelligence
-                  </b>
-
-                  <p>
-                    SignalOS combines fit with
-                    intent evidence instead of
-                    treating every company as an
-                    equal lead.
-                  </p>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {step === 3 && (
-            <div>
-
-              <div className="sectionIntro">
-                <b>
-                  What signals mean “ready now”?
-                </b>
-
-                <span>
-                  Select the buying signals this
-                  campaign should prioritize.
-                </span>
-              </div>
-
-              <div className="signalGrid">
-
-                {SIGNALS.map((signal) => (
-
-                  <button
-                    type="button"
-                    key={signal}
-                    className={
-                      form.signals.includes(signal)
-                        ? "signal selected"
-                        : "signal"
-                    }
-                    onClick={() =>
-                      toggleSignal(signal)
-                    }
-                  >
-
-                    <span>
-                      {form.signals.includes(
-                        signal
-                      ) ? (
-                        <Check size={15} />
-                      ) : null}
-                    </span>
-
-                    <b>{signal}</b>
-
-                    <small>
-                      Evidence that can indicate
-                      a current business change.
-                    </small>
-
-                  </button>
-
-                ))}
-
-              </div>
-
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="wizardGrid">
-
-              <div className="channelCard full">
-
-                <div className="channelIcon">
-                  <Mail size={20} />
-                </div>
-
-                <div>
-                  <b>Email</b>
-
-                  <span>
-                    Evidence-led outbound through
-                    a connected provider.
-                  </span>
-                </div>
-
-                <Badge tone="green">
-                  AVAILABLE
-                </Badge>
-
-              </div>
-
-              <label className="field">
-                <span>
-                  Booking link
-                </span>
-
-                <input
-                  value={form.booking_link}
-                  onChange={(event) =>
-                    update(
-                      "booking_link",
-                      event.target.value
-                    )
-                  }
-                  placeholder="https://calendly.com/yourname/30min"
-                />
-              </label>
-
-              <label className="field">
-                <span>
-                  Daily send limit
-                </span>
-
-                <input
-                  type="number"
-                  value={form.daily_limit}
-                  onChange={(event) =>
-                    update(
-                      "daily_limit",
-                      event.target.value
-                    )
-                  }
-                />
-              </label>
-
-              <label className="field">
-                <span>
-                  Sending window
-                </span>
-
-                <input
-                  value={form.send_window}
-                  onChange={(event) =>
-                    update(
-                      "send_window",
-                      event.target.value
-                    )
-                  }
-                />
-              </label>
-
-              <div className="infoCard full">
-
-                <ShieldCheck size={18} />
-
-                <div>
-                  <b>
-                    Safety defaults
-                  </b>
-
-                  <p>
-                    Opt-outs stop outreach.
-                    Booking stops the sequence.
-                    SignalOS never guesses contact
-                    details.
-                  </p>
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
-          {step === 5 && (
-            <div className="review">
-
-              <div className="reviewHero">
-                <Sparkles size={22} />
-
-                <div>
-                  <b>
-                    Ready for launch
-                  </b>
-
-                  <span>
-                    The campaign will be saved
-                    as a draft. Activate it only
-                    after reviewing connected
-                    providers.
-                  </span>
-                </div>
-              </div>
-
-              <div className="reviewGrid">
-
-                <div>
-                  <small>
-                    CAMPAIGN
-                  </small>
-
-                  <b>
-                    {form.name ||
-                      "Untitled campaign"}
-                  </b>
-
-                  <span>
-                    {form.countries} ·{" "}
-                    {form.industries ||
-                      "All industries"}
-                  </span>
-                </div>
-
-                <div>
-                  <small>
-                    BUYING COMMITTEE
-                  </small>
-
-                  <b>
-                    {form.decision_makers}
-                  </b>
-
-                  <span>
-                    Technology:{" "}
-                    {form.technologies ||
-                      "Any"}
-                  </span>
-                </div>
-
-                <div>
-                  <small>
-                    INTENT
-                  </small>
-
-                  <b>
-                    {form.signals.length}{" "}
-                    signals selected
-                  </b>
-
-                  <span>
-                    {form.signals.join(" · ")}
-                  </span>
-                </div>
-
-                <div>
-                  <small>
-                    OUTREACH
-                  </small>
-
-                  <b>
-                    Email ·{" "}
-                    {form.daily_limit}/day
-                  </b>
-
-                  <span>
-                    {form.booking_link ||
-                      "No booking link configured yet"}
-                  </span>
-                </div>
-
-              </div>
-
-              <label className="autonomy">
-
-                <span>
-                  AI autonomy
-                </span>
-
-                <select
-                  value={form.ai_autonomy}
-                  onChange={(event) =>
-                    update(
-                      "ai_autonomy",
-                      event.target.value
-                    )
-                  }
-                >
-                  <option>
-                    Manual
-                  </option>
-
-                  <option>
-                    Copilot
-                  </option>
-
-                  <option>
-                    Autopilot
-                  </option>
-                </select>
-
-              </label>
-
-            </div>
-          )}
-
-          {error && (
-            <div className="formError">
-              {error}
-            </div>
-          )}
-
-        </div>
-
-        <footer className="wizardFoot">
-
-          <button
-            className="btn ghost"
-            onClick={close}
-          >
-            Cancel
-          </button>
-
-          <div>
-
-            {step > 1 && (
-              <button
-                className="btn secondary"
-                onClick={() =>
-                  setStep(step - 1)
-                }
-              >
-                Back
-              </button>
-            )}
-
-            {step < 5 ? (
-              <button
-                className="btn primary"
-                onClick={next}
-              >
-                Continue
-                <ArrowRight size={15} />
-              </button>
-            ) : (
-              <button
-                className="btn primary"
-                disabled={saving}
-                onClick={save}
-              >
-                {saving ? (
-                  <RefreshCw
-                    className="spin"
-                    size={15}
-                  />
-                ) : (
-                  <Check size={15} />
-                )}
-
-                Save draft
-              </button>
-            )}
-
-          </div>
-
-        </footer>
-
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------
-   INTEGRATIONS
-------------------------------------------------------- */
-
-function Integrations() {
-
-  const [providers, setProviders] =
-    useState([]);
-
-  const [connections, setConnections] =
-    useState({});
-
-  const [category, setCategory] =
-    useState("all");
-
-  const [query, setQuery] =
-    useState("");
-
-  const [selected, setSelected] =
+  const [integrationModal, setIntegrationModal] =
     useState(null);
 
-  const [values, setValues] =
-    useState({});
+  const [onboarding, setOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
 
-  const [saving, setSaving] =
+  const [automationEnabled, setAutomationEnabled] =
+    useState(true);
+
+  const [aiMode, setAiMode] = useState("copilot");
+
+  const [campaignModal, setCampaignModal] =
     useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [toast, setToast] = useState("");
 
-  const load = async () => {
-
+  async function loadWorkspace() {
     try {
+      const [workspaceData, dashboardData] =
+        await Promise.all([
+          api(`/workspaces/${WS}`),
+          api(`/workspaces/${WS}/dashboard`)
+        ]);
 
-      const [
-        providerResponse,
-        connectorResponse
-      ] = await Promise.all([
-        api("/providers"),
-        api(
-          `/workspaces/${WORKSPACE_ID}/connectors`
-        )
-      ]);
+      setWorkspace(workspaceData);
+      setDashboard(dashboardData);
+
+      if (workspaceData?.settings) {
+        setAutomationEnabled(
+          workspaceData.settings.automation_enabled !== false
+        );
+
+        setAiMode(
+          workspaceData.settings.ai_mode || "copilot"
+        );
+
+        if (
+          workspaceData.settings.onboarding_completed === false
+        ) {
+          setOnboarding(true);
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function loadProspects() {
+    try {
+      const data = await api(
+        `/workspaces/${WS}/prospects`
+      );
+
+      setProspects(
+        Array.isArray(data)
+          ? data
+          : data?.items || data?.prospects || []
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadCampaigns() {
+    try {
+      const data = await api(
+        `/workspaces/${WS}/campaigns`
+      );
+
+      setCampaigns(
+        Array.isArray(data)
+          ? data
+          : data?.items || data?.campaigns || []
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadProviders() {
+    try {
+      const data = await api("/providers");
 
       setProviders(
-        providerResponse.providers || []
+        Array.isArray(data)
+          ? data
+          : data?.providers || data?.items || []
       );
-
-      setConnections(
-        Object.fromEntries(
-          (connectorResponse || []).map(
-            (connector) => [
-              connector.provider,
-              connector
-            ]
-          )
-        )
-      );
-
-    } catch (error) {
-
-      setError(error.message);
-
+    } catch (err) {
+      console.error(err);
     }
-  };
+  }
+
+  async function loadAll() {
+    setLoading(true);
+
+    await Promise.all([
+      loadWorkspace(),
+      loadProspects(),
+      loadCampaigns(),
+      loadProviders()
+    ]);
+
+    setLoading(false);
+  }
 
   useEffect(() => {
-    load();
+    loadAll();
   }, []);
 
-  const filtered = useMemo(
-    () =>
-      providers.filter((provider) => {
+  function navigate(nextPage) {
+    setPage(nextPage);
+    setMobileOpen(false);
+  }
 
-        const categoryMatch =
-          category === "all" ||
-          provider.category === category;
+  function showToast(message) {
+    setToast(message);
 
-        const queryMatch =
-          `${provider.name} ${provider.description}`
-            .toLowerCase()
-            .includes(query.toLowerCase());
+    window.setTimeout(() => {
+      setToast("");
+    }, 3000);
+  }
 
-        return (
-          categoryMatch &&
-          queryMatch
-        );
-      }),
-    [providers, category, query]
-  );
-
-  const connect = async (provider) => {
-
-    setError("");
-
+  async function completeOnboarding() {
     try {
-
-      const result = await api(
-        `/workspaces/${WORKSPACE_ID}/connectors/${provider.id}/connect`,
+      await api(
+        `/workspaces/${WS}/onboarding/complete`,
         {
           method: "POST"
         }
       );
 
-      if (result.status === "REDIRECT") {
-        window.location.href = result.url;
+      setOnboarding(false);
+      showToast("Workspace setup completed.");
+      loadWorkspace();
+    } catch (err) {
+      showToast(err.message);
+    }
+  }
+
+  async function updateAutomation(value) {
+    try {
+      await api(
+        `/workspaces/${WS}/automation`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            enabled: value
+          })
+        }
+      );
+
+      setAutomationEnabled(value);
+
+      showToast(
+        value
+          ? "Automation enabled."
+          : "All automation paused."
+      );
+    } catch (err) {
+      showToast(err.message);
+    }
+  }
+
+  async function changeAiMode(mode) {
+    try {
+      await api(
+        `/workspaces/${WS}/automation`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            ai_mode: mode
+          })
+        }
+      );
+
+      setAiMode(mode);
+      showToast(`AI mode changed to ${mode}.`);
+    } catch (err) {
+      showToast(err.message);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <Sidebar
+        page={page}
+        navigate={navigate}
+        mobileOpen={mobileOpen}
+        setMobileOpen={setMobileOpen}
+        workspace={workspace}
+      />
+
+      <main className="main-area">
+        <Topbar
+          page={page}
+          onMenu={() => setMobileOpen(true)}
+          automationEnabled={automationEnabled}
+          onAutomationChange={updateAutomation}
+          onRefresh={loadAll}
+        />
+
+        {error && (
+          <div className="connection-warning">
+            <ShieldCheck size={18} />
+
+            <div>
+              <strong>SignalOS API connection issue</strong>
+              <span>{error}</span>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<RefreshCw size={15} />}
+              onClick={loadAll}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+
+        <div className="page-container">
+          {loading && !dashboard ? (
+            <LoadingScreen />
+          ) : (
+            <PageRouter
+              page={page}
+              dashboard={dashboard}
+              prospects={prospects}
+              campaigns={campaigns}
+              providers={providers}
+              workspace={workspace}
+              navigate={navigate}
+              openIntegration={setIntegrationModal}
+              openCampaign={() => setCampaignModal(true)}
+              automationEnabled={automationEnabled}
+              updateAutomation={updateAutomation}
+              aiMode={aiMode}
+              changeAiMode={changeAiMode}
+              showToast={showToast}
+            />
+          )}
+        </div>
+      </main>
+
+      {integrationModal && (
+        <IntegrationModal
+          provider={integrationModal}
+          onClose={() => setIntegrationModal(null)}
+          onUpdated={async () => {
+            await loadProviders();
+            await loadWorkspace();
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {campaignModal && (
+        <CampaignModal
+          onClose={() => setCampaignModal(false)}
+          onCreated={async () => {
+            await loadCampaigns();
+            setCampaignModal(false);
+            navigate("campaigns");
+            showToast("Campaign created.");
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {onboarding && (
+        <Onboarding
+          step={onboardingStep}
+          setStep={setOnboardingStep}
+          onSkip={completeOnboarding}
+          onFinish={completeOnboarding}
+          navigate={navigate}
+        />
+      )}
+
+      {toast && (
+        <div className="toast">
+          <Check size={17} />
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Sidebar({
+  page,
+  navigate,
+  mobileOpen,
+  setMobileOpen,
+  workspace
+}) {
+  return (
+    <>
+      {mobileOpen && (
+        <div
+          className="mobile-overlay"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`sidebar ${
+          mobileOpen ? "sidebar-open" : ""
+        }`}
+      >
+        <div className="brand">
+          <div className="brand-mark">
+            S
+          </div>
+
+          <div className="brand-name">
+            Signal<span>OS</span>
+          </div>
+
+          <button
+            className="sidebar-close"
+            onClick={() => setMobileOpen(false)}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="workspace-selector">
+          <div className="workspace-avatar">
+            {(workspace?.name || "S")[0]}
+          </div>
+
+          <div className="workspace-info">
+            <strong>
+              {workspace?.name || "Your workspace"}
+            </strong>
+
+            <span>Workspace</span>
+          </div>
+
+          <ChevronDown size={15} />
+        </div>
+
+        <div className="sidebar-content">
+          {NAV.map((section) => (
+            <div className="nav-section" key={section.label}>
+              <div className="nav-label">
+                {section.label}
+              </div>
+
+              {section.items.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <button
+                    key={item.id}
+                    className={`nav-item ${
+                      page === item.id ? "nav-active" : ""
+                    }`}
+                    onClick={() => navigate(item.id)}
+                  >
+                    <Icon size={17} strokeWidth={1.8} />
+
+                    <span>{item.label}</span>
+
+                    {item.id === "integrations" &&
+                      <span className="nav-dot" />}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div className="sidebar-bottom">
+          <button className="nav-item">
+            <LifeBuoy size={17} />
+            <span>Help center</span>
+          </button>
+
+          <button className="user-card">
+            <div className="user-avatar">
+              <UserRound size={16} />
+            </div>
+
+            <div>
+              <strong>Workspace owner</strong>
+              <span>Admin</span>
+            </div>
+
+            <MoreHorizontal size={17} />
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function Topbar({
+  page,
+  onMenu,
+  automationEnabled,
+  onAutomationChange,
+  onRefresh
+}) {
+  const title =
+    NAV.flatMap((x) => x.items).find(
+      (x) => x.id === page
+    )?.label || "Overview";
+
+  return (
+    <header className="topbar">
+      <div className="topbar-left">
+        <button className="mobile-menu" onClick={onMenu}>
+          <Menu size={21} />
+        </button>
+
+        <div>
+          <div className="breadcrumb">
+            SignalOS
+            <ChevronRight size={13} />
+            {title}
+          </div>
+
+          <h1>{title}</h1>
+        </div>
+      </div>
+
+      <div className="topbar-actions">
+        <div className="automation-pill">
+          <span
+            className={`status-dot ${
+              automationEnabled
+                ? "status-green"
+                : "status-gray"
+            }`}
+          />
+
+          <span>
+            {automationEnabled
+              ? "Automation active"
+              : "Automation paused"}
+          </span>
+
+          <Toggle
+            checked={automationEnabled}
+            onChange={onAutomationChange}
+          />
+        </div>
+
+        <button
+          className="icon-button"
+          title="Refresh"
+          onClick={onRefresh}
+        >
+          <RefreshCw size={17} />
+        </button>
+
+        <button className="icon-button">
+          <Bell size={17} />
+        </button>
+
+        <div className="command-button">
+          <Command size={15} />
+          <span>Search</span>
+          <kbd>⌘ K</kbd>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function PageRouter(props) {
+  switch (props.page) {
+    case "prospects":
+      return <ProspectsPage {...props} />;
+
+    case "campaigns":
+      return <CampaignsPage {...props} />;
+
+    case "integrations":
+      return <IntegrationsPage {...props} />;
+
+    case "automation":
+      return <AutomationPage {...props} />;
+
+    case "companies":
+      return (
+        <PlaceholderPage
+          title="Companies"
+          icon={Building2}
+          description="Manage target accounts and company-level buying signals."
+        />
+      );
+
+    case "intent":
+      return (
+        <PlaceholderPage
+          title="Intent signals"
+          icon={Target}
+          description="Discover companies showing meaningful buying intent."
+        />
+      );
+
+    case "conversations":
+      return (
+        <PlaceholderPage
+          title="Conversations"
+          icon={MessageSquare}
+          description="Centralize replies, objections, positive responses and follow-ups."
+        />
+      );
+
+    case "meetings":
+      return (
+        <PlaceholderPage
+          title="Meetings"
+          icon={CalendarDays}
+          description="Track booked meetings and handoffs."
+        />
+      );
+
+    case "activity":
+      return (
+        <PlaceholderPage
+          title="AI activity"
+          icon={Activity}
+          description="Monitor what SignalOS agents are researching, scoring and executing."
+        />
+      );
+
+    case "analytics":
+      return (
+        <PlaceholderPage
+          title="Analytics"
+          icon={BarChart3}
+          description="Measure prospecting, outreach and pipeline performance."
+        />
+      );
+
+    case "settings":
+      return (
+        <PlaceholderPage
+          title="Settings"
+          icon={Settings}
+          description="Manage workspace, permissions, security and platform configuration."
+        />
+      );
+
+    default:
+      return <OverviewPage {...props} />;
+  }
+}
+
+function OverviewPage({
+  dashboard,
+  prospects,
+  campaigns,
+  navigate,
+  openIntegration,
+  openCampaign,
+  providers
+}) {
+  const connected =
+    providers.filter(
+      (p) => normalizedStatus(p) === "connected"
+    ).length;
+
+  const totalProspects =
+    dashboard?.prospects ??
+    dashboard?.prospect_count ??
+    prospects.length ??
+    0;
+
+  const activeCampaigns =
+    dashboard?.active_campaigns ??
+    campaigns.filter(
+      (c) =>
+        String(c.status).toLowerCase() === "active"
+    ).length;
+
+  const meetings =
+    dashboard?.meetings ??
+    dashboard?.meeting_count ??
+    0;
+
+  const replies =
+    dashboard?.replies ??
+    dashboard?.reply_count ??
+    0;
+
+  return (
+    <>
+      <div className="page-header-row">
+        <div>
+          <div className="eyebrow">
+            COMMAND CENTER
+          </div>
+
+          <h2>
+            Your growth engine, in one place.
+          </h2>
+
+          <p>
+            SignalOS finds relevant prospects, understands
+            why they may buy, and helps your team act at
+            the right moment.
+          </p>
+        </div>
+
+        <div className="header-actions">
+          <Button
+            variant="secondary"
+            icon={<Link2 size={16} />}
+            onClick={() => navigate("integrations")}
+          >
+            Connect tools
+          </Button>
+
+          <Button
+            icon={<Plus size={16} />}
+            onClick={openCampaign}
+          >
+            Create campaign
+          </Button>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <MetricCard
+          label="Prospects"
+          value={totalProspects}
+          change="In your workspace"
+          icon={Users}
+        />
+
+        <MetricCard
+          label="Active campaigns"
+          value={activeCampaigns}
+          change="Currently running"
+          icon={Send}
+        />
+
+        <MetricCard
+          label="Replies"
+          value={replies}
+          change="Detected by SignalOS"
+          icon={MessageSquare}
+        />
+
+        <MetricCard
+          label="Meetings"
+          value={meetings}
+          change="Booked"
+          icon={CalendarDays}
+        />
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="panel panel-large">
+          <div className="panel-header">
+            <div>
+              <h3>Pipeline activity</h3>
+              <p>
+                Your outbound system at a glance.
+              </p>
+            </div>
+
+            <button
+              className="text-button"
+              onClick={() => navigate("analytics")}
+            >
+              View analytics
+              <ArrowRight size={15} />
+            </button>
+          </div>
+
+          <div className="pipeline">
+            <PipelineStage
+              number={totalProspects}
+              label="Prospects"
+              icon={Users}
+            />
+
+            <div className="pipeline-arrow">
+              <ArrowRight size={17} />
+            </div>
+
+            <PipelineStage
+              number={activeCampaigns}
+              label="Activated"
+              icon={Zap}
+            />
+
+            <div className="pipeline-arrow">
+              <ArrowRight size={17} />
+            </div>
+
+            <PipelineStage
+              number={replies}
+              label="Replies"
+              icon={MessageSquare}
+            />
+
+            <div className="pipeline-arrow">
+              <ArrowRight size={17} />
+            </div>
+
+            <PipelineStage
+              number={meetings}
+              label="Meetings"
+              icon={CalendarDays}
+            />
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h3>Connected stack</h3>
+              <p>
+                Tools available to SignalOS.
+              </p>
+            </div>
+
+            <button
+              className="icon-button-small"
+              onClick={() => navigate("integrations")}
+            >
+              <ArrowRight size={15} />
+            </button>
+          </div>
+
+          <div className="stack-list">
+            {providers
+              .filter(
+                (p) =>
+                  normalizedStatus(p) === "connected"
+              )
+              .slice(0, 5)
+              .map((provider) => (
+                <button
+                  className="stack-row"
+                  key={providerKey(provider)}
+                  onClick={() => openIntegration(provider)}
+                >
+                  <Logo provider={provider} size={34} />
+
+                  <div>
+                    <strong>
+                      {formatProviderName(provider)}
+                    </strong>
+
+                    <span>Connected</span>
+                  </div>
+
+                  <Check
+                    size={16}
+                    className="success-icon"
+                  />
+                </button>
+              ))}
+
+            {connected === 0 && (
+              <div className="mini-empty">
+                <Link2 size={19} />
+                <span>
+                  No integrations connected yet.
+                </span>
+              </div>
+            )}
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate("integrations")}
+          >
+            Manage integrations
+          </Button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h3>Recent prospects</h3>
+            <p>
+              Highest-priority people in your workspace.
+            </p>
+          </div>
+
+          <button
+            className="text-button"
+            onClick={() => navigate("prospects")}
+          >
+            View all
+            <ArrowRight size={15} />
+          </button>
+        </div>
+
+        <ProspectTable
+          prospects={prospects.slice(0, 6)}
+          compact
+        />
+      </div>
+    </>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  change,
+  icon: Icon
+}) {
+  return (
+    <div className="metric-card">
+      <div className="metric-top">
+        <span>{label}</span>
+
+        <div className="metric-icon">
+          <Icon size={17} />
+        </div>
+      </div>
+
+      <div className="metric-value">
+        {value}
+      </div>
+
+      <div className="metric-change">
+        {change}
+      </div>
+    </div>
+  );
+}
+
+function PipelineStage({
+  number,
+  label,
+  icon: Icon
+}) {
+  return (
+    <div className="pipeline-stage">
+      <div className="pipeline-icon">
+        <Icon size={18} />
+      </div>
+
+      <strong>{number}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function ProspectsPage({
+  prospects,
+  openCampaign
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+
+  const filtered = useMemo(() => {
+    return prospects.filter((p) => {
+      const text = [
+        p.name,
+        p.full_name,
+        p.email,
+        p.title,
+        p.company_name,
+        p.company,
+        p.country
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesQuery =
+        !query ||
+        text.includes(query.toLowerCase());
+
+      const score =
+        Number(p.score || p.fit_score || 0);
+
+      const matchesFilter =
+        filter === "all" ||
+        (filter === "high" && score >= 80) ||
+        (filter === "medium" &&
+          score >= 50 &&
+          score < 80) ||
+        (filter === "low" && score < 50);
+
+      return matchesQuery && matchesFilter;
+    });
+  }, [prospects, query, filter]);
+
+  return (
+    <>
+      <div className="page-header-row">
+        <div>
+          <div className="eyebrow">
+            PROSPECT INTELLIGENCE
+          </div>
+
+          <h2>Prospects</h2>
+
+          <p>
+            Review, qualify and activate the people
+            SignalOS has identified.
+          </p>
+        </div>
+
+        <Button
+          icon={<Plus size={16} />}
+          onClick={openCampaign}
+        >
+          Create campaign
+        </Button>
+      </div>
+
+      <div className="toolbar">
+        <div className="search-box">
+          <Search size={17} />
+          <input
+            value={query}
+            onChange={(e) =>
+              setQuery(e.target.value)
+            }
+            placeholder="Search prospects, companies or titles..."
+          />
+        </div>
+
+        <select
+          className="select"
+          value={filter}
+          onChange={(e) =>
+            setFilter(e.target.value)
+          }
+        >
+          <option value="all">
+            All prospects
+          </option>
+
+          <option value="high">
+            High fit
+          </option>
+
+          <option value="medium">
+            Medium fit
+          </option>
+
+          <option value="low">
+            Low fit
+          </option>
+        </select>
+
+        <button className="filter-button">
+          <Filter size={16} />
+          Filters
+        </button>
+      </div>
+
+      <div className="panel table-panel">
+        <ProspectTable prospects={filtered} />
+      </div>
+    </>
+  );
+}
+
+function ProspectTable({
+  prospects,
+  compact = false
+}) {
+  if (!prospects.length) {
+    return (
+      <EmptyState
+        icon={Users}
+        title="No prospects yet"
+        description="Connect your data providers or create a campaign to start building your prospect pool."
+      />
+    );
+  }
+
+  return (
+    <div className="table-scroll">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Prospect</th>
+            <th>Company</th>
+            <th>Title</th>
+            <th>Fit</th>
+            <th>Intent</th>
+            <th>Status</th>
+            {!compact && <th />}
+          </tr>
+        </thead>
+
+        <tbody>
+          {prospects.map((p, index) => {
+            const score = Number(
+              p.score ||
+                p.fit_score ||
+                p.qualification_score ||
+                0
+            );
+
+            const name =
+              p.name ||
+              p.full_name ||
+              "Unnamed prospect";
+
+            const company =
+              p.company_name ||
+              p.company ||
+              "—";
+
+            const title =
+              p.title ||
+              p.job_title ||
+              "—";
+
+            return (
+              <tr key={p.id || index}>
+                <td>
+                  <div className="person-cell">
+                    <div className="person-avatar">
+                      {name
+                        .split(" ")
+                        .map((x) => x[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </div>
+
+                    <div>
+                      <strong>{name}</strong>
+
+                      <span>
+                        {p.email || "Email not verified"}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+
+                <td>
+                  <span className="table-primary">
+                    {company}
+                  </span>
+                </td>
+
+                <td>{title}</td>
+
+                <td>
+                  <Score score={score} />
+                </td>
+
+                <td>
+                  <Badge
+                    tone={
+                      p.intent
+                        ? "orange"
+                        : "neutral"
+                    }
+                  >
+                    {p.intent || "Unknown"}
+                  </Badge>
+                </td>
+
+                <td>
+                  <Badge
+                    tone={
+                      String(
+                        p.status || "new"
+                      ).toLowerCase() ===
+                      "active"
+                        ? "green"
+                        : "neutral"
+                    }
+                  >
+                    {p.status || "New"}
+                  </Badge>
+                </td>
+
+                {!compact && (
+                  <td>
+                    <button className="icon-button-small">
+                      <MoreHorizontal size={16} />
+                    </button>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Score({ score }) {
+  let tone = "low";
+
+  if (score >= 80) tone = "high";
+  else if (score >= 50) tone = "medium";
+
+  return (
+    <div className={`score score-${tone}`}>
+      <span>{score || "—"}</span>
+    </div>
+  );
+}
+
+function CampaignsPage({
+  campaigns,
+  openCampaign,
+  showToast
+}) {
+  async function updateCampaign(campaign) {
+    const current =
+      String(campaign.status || "").toLowerCase();
+
+    const next =
+      current === "active"
+        ? "paused"
+        : "active";
+
+    try {
+      await api(
+        `/workspaces/${WS}/campaigns/${campaign.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: next
+          })
+        }
+      );
+
+      showToast(
+        next === "active"
+          ? "Campaign activated."
+          : "Campaign paused."
+      );
+
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message);
+    }
+  }
+
+  return (
+    <>
+      <div className="page-header-row">
+        <div>
+          <div className="eyebrow">
+            OUTBOUND
+          </div>
+
+          <h2>Campaigns</h2>
+
+          <p>
+            Build evidence-led outbound campaigns
+            around real buying signals.
+          </p>
+        </div>
+
+        <Button
+          icon={<Plus size={16} />}
+          onClick={openCampaign}
+        >
+          New campaign
+        </Button>
+      </div>
+
+      {!campaigns.length ? (
+        <div className="panel">
+          <EmptyState
+            icon={Send}
+            title="No campaigns yet"
+            description="Create your first campaign and define who SignalOS should find, why they should care, and how they should be contacted."
+            action={
+              <Button
+                icon={<Plus size={16} />}
+                onClick={openCampaign}
+              >
+                Create campaign
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="campaign-grid">
+          {campaigns.map((campaign) => {
+            const active =
+              String(
+                campaign.status || ""
+              ).toLowerCase() === "active";
+
+            return (
+              <div
+                className="campaign-card"
+                key={campaign.id}
+              >
+                <div className="campaign-top">
+                  <div className="campaign-icon">
+                    <Send size={18} />
+                  </div>
+
+                  <Badge
+                    tone={
+                      active
+                        ? "green"
+                        : "neutral"
+                    }
+                  >
+                    {campaign.status || "Draft"}
+                  </Badge>
+                </div>
+
+                <h3>
+                  {campaign.name ||
+                    "Untitled campaign"}
+                </h3>
+
+                <p>
+                  {campaign.description ||
+                    "Evidence-led prospecting campaign."}
+                </p>
+
+                <div className="campaign-meta">
+                  <div>
+                    <span>Channel</span>
+                    <strong>
+                      {campaign.channel ||
+                        "Email"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Prospects</span>
+                    <strong>
+                      {campaign.prospect_count ||
+                        0}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="campaign-footer">
+                  <Button
+                    variant={
+                      active
+                        ? "secondary"
+                        : "primary"
+                    }
+                    size="sm"
+                    icon={
+                      active ? (
+                        <Pause size={15} />
+                      ) : (
+                        <Play size={15} />
+                      )
+                    }
+                    onClick={() =>
+                      updateCampaign(campaign)
+                    }
+                  >
+                    {active
+                      ? "Pause"
+                      : "Activate"}
+                  </Button>
+
+                  <button className="icon-button-small">
+                    <MoreHorizontal size={16} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+function IntegrationsPage({
+  providers,
+  openIntegration
+}) {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] =
+    useState("all");
+
+  const categories = [
+    ["all", "All"],
+    ["email", "Email"],
+    ["calendar", "Calendar"],
+    ["crm", "CRM"],
+    ["ai", "AI"],
+    ["data", "Data & enrichment"],
+    ["voice", "Voice"],
+    ["messaging", "Messaging"],
+    ["storage", "Storage"],
+    ["notifications", "Notifications"]
+  ];
+
+  const filtered = useMemo(() => {
+    return providers.filter((provider) => {
+      const name =
+        formatProviderName(provider);
+
+      const description =
+        provider.description ||
+        PROVIDER_DESCRIPTIONS[
+          providerKey(provider)
+        ] ||
+        "";
+
+      const text =
+        `${name} ${description}`.toLowerCase();
+
+      const matchesQuery =
+        !query ||
+        text.includes(query.toLowerCase());
+
+      const providerCategory =
+        String(
+          provider.category ||
+            provider.type ||
+            ""
+        ).toLowerCase();
+
+      const matchesCategory =
+        category === "all" ||
+        providerCategory.includes(category);
+
+      return (
+        matchesQuery &&
+        matchesCategory
+      );
+    });
+  }, [providers, query, category]);
+
+  const connected = providers.filter(
+    (p) => normalizedStatus(p) === "connected"
+  );
+
+  return (
+    <>
+      <div className="integration-hero">
+        <div>
+          <div className="eyebrow">
+            APP MARKETPLACE
+          </div>
+
+          <h2>
+            Connect your sales stack.
+          </h2>
+
+          <p>
+            Bring the tools your team already uses
+            into SignalOS. Connect once, control
+            permissions, and decide exactly which
+            systems automation can use.
+          </p>
+        </div>
+
+        <div className="integration-summary">
+          <div>
+            <strong>{connected.length}</strong>
+            <span>Connected</span>
+          </div>
+
+          <div>
+            <strong>{providers.length}</strong>
+            <span>Available</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="integration-toolbar">
+        <div className="search-box large">
+          <Search size={18} />
+
+          <input
+            value={query}
+            onChange={(e) =>
+              setQuery(e.target.value)
+            }
+            placeholder="Search integrations..."
+          />
+        </div>
+
+        <div className="category-tabs">
+          {categories.map(([id, label]) => (
+            <button
+              key={id}
+              className={
+                category === id
+                  ? "category-active"
+                  : ""
+              }
+              onClick={() =>
+                setCategory(id)
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="integration-section">
+        <div className="section-title">
+          <div>
+            <h3>
+              {category === "all"
+                ? "All integrations"
+                : CATEGORY_LABELS[category]}
+            </h3>
+
+            <p>
+              Connect the systems SignalOS needs
+              for prospecting and outbound.
+            </p>
+          </div>
+        </div>
+
+        <div className="integration-grid">
+          {filtered.map((provider) => (
+            <IntegrationCard
+              key={providerKey(provider)}
+              provider={provider}
+              onClick={() =>
+                openIntegration(provider)
+              }
+            />
+          ))}
+        </div>
+
+        {!filtered.length && (
+          <EmptyState
+            icon={Search}
+            title="No integrations found"
+            description="Try a different search term or category."
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+function IntegrationCard({
+  provider,
+  onClick
+}) {
+  const status =
+    normalizedStatus(provider);
+
+  const category =
+    provider.category ||
+    provider.type ||
+    "Integration";
+
+  return (
+    <button
+      className="integration-card"
+      onClick={onClick}
+    >
+      <div className="integration-card-top">
+        <Logo provider={provider} size={48} />
+
+        {status === "connected" ? (
+          <span className="connected-label">
+            <Check size={13} />
+            Connected
+          </span>
+        ) : status === "disabled" ? (
+          <Badge tone="neutral">
+            Disabled
+          </Badge>
+        ) : (
+          <span className="arrow-circle">
+            <ArrowRight size={15} />
+          </span>
+        )}
+      </div>
+
+      <div className="integration-card-content">
+        <div className="integration-name-row">
+          <h3>
+            {formatProviderName(provider)}
+          </h3>
+
+          {provider.recommended && (
+            <span className="recommended">
+              Recommended
+            </span>
+          )}
+        </div>
+
+        <p>
+          {provider.description ||
+            PROVIDER_DESCRIPTIONS[
+              providerKey(provider)
+            ] ||
+            "Connect this platform to SignalOS."}
+        </p>
+      </div>
+
+      <div className="integration-card-footer">
+        <span>{category}</span>
+
+        <span>
+          {status === "connected"
+            ? "Manage"
+            : "Connect"}
+          <ChevronRight size={14} />
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function IntegrationModal({
+  provider,
+  onClose,
+  onUpdated,
+  showToast
+}) {
+  const [loading, setLoading] =
+    useState(false);
+
+  const [mode, setMode] =
+    useState("overview");
+
+  const [enabled, setEnabled] =
+    useState(
+      normalizedStatus(provider) !==
+        "disabled"
+    );
+
+  const [apiKey, setApiKey] =
+    useState("");
+
+  const status =
+    normalizedStatus(provider);
+
+  const key = providerKey(provider);
+
+  async function connect() {
+    setLoading(true);
+
+    try {
+      const result = await api(
+        `/workspaces/${WS}/connectors/${key}/connect`,
+        {
+          method: "POST"
+        }
+      );
+
+      const url =
+        result?.authorization_url ||
+        result?.auth_url ||
+        result?.url;
+
+      if (url) {
+        window.location.href = url;
         return;
       }
 
-      setSelected({
-        ...provider,
-        edit: false,
-        config: result
-      });
-
-    } catch (error) {
-
-      setError(error.message);
-
+      if (
+        result?.requires_configuration ||
+        result?.mode === "manual"
+      ) {
+        setMode("configure");
+      } else {
+        showToast("Connection started.");
+      }
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const configure = async () => {
+  async function configure() {
+    setLoading(true);
 
-    if (!selected) {
+    try {
+      await api(
+        `/workspaces/${WS}/connectors/${key}/configure`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            api_key: apiKey
+          })
+        }
+      );
+
+      await onUpdated();
+
+      showToast(
+        `${formatProviderName(
+          provider
+        )} connected successfully.`
+      );
+
+      onClose();
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggle(value) {
+    setLoading(true);
+
+    try {
+      await api(
+        `/workspaces/${WS}/connectors/${key}/toggle`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            enabled: value
+          })
+        }
+      );
+
+      setEnabled(value);
+
+      await onUpdated();
+
+      showToast(
+        value
+          ? "Integration enabled."
+          : "Integration disabled."
+      );
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="integration-modal">
+        <div className="modal-header">
+          <div className="modal-provider-heading">
+            <Logo
+              provider={provider}
+              size={48}
+            />
+
+            <div>
+              <div className="modal-eyebrow">
+                {provider.category ||
+                  provider.type ||
+                  "INTEGRATION"}
+              </div>
+
+              <h2>
+                {formatProviderName(provider)}
+              </h2>
+            </div>
+          </div>
+
+          <button
+            className="modal-close"
+            onClick={onClose}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {status === "connected" && (
+            <div className="connection-success">
+              <div className="success-check">
+                <Check size={17} />
+              </div>
+
+              <div>
+                <strong>
+                  Connected to SignalOS
+                </strong>
+
+                <span>
+                  Your workspace can use this
+                  integration according to its
+                  enabled permissions.
+                </span>
+              </div>
+
+              <Toggle
+                checked={enabled}
+                onChange={toggle}
+                disabled={loading}
+              />
+            </div>
+          )}
+
+          {mode === "overview" && (
+            <>
+              <div className="provider-intro">
+                <h3>
+                  {PROVIDER_DESCRIPTIONS[key] ||
+                    provider.description ||
+                    `Connect ${formatProviderName(
+                      provider
+                    )} to SignalOS.`}
+                </h3>
+
+                <p>
+                  SignalOS only requests the access
+                  required for the capabilities you
+                  enable.
+                </p>
+              </div>
+
+              <div className="permissions-card">
+                <div className="permissions-header">
+                  <div>
+                    <h3>
+                      What SignalOS can do
+                    </h3>
+
+                    <p>
+                      You can disable this connection
+                      at any time.
+                    </p>
+                  </div>
+
+                  <ShieldCheck
+                    size={20}
+                  />
+                </div>
+
+                <PermissionRow
+                  label="Use the connected account"
+                />
+
+                <PermissionRow
+                  label="Read relevant activity"
+                />
+
+                <PermissionRow
+                  label="Create SignalOS actions"
+                />
+
+                <PermissionRow
+                  label="Sync supported records"
+                />
+              </div>
+
+              <div className="security-note">
+                <ShieldCheck size={17} />
+
+                <div>
+                  <strong>
+                    Secure authentication
+                  </strong>
+
+                  <span>
+                    You will authenticate directly
+                    with the provider. SignalOS does
+                    not ask for your provider password.
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <Button
+                  variant="secondary"
+                  onClick={onClose}
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  loading={loading}
+                  icon={<Link2 size={16} />}
+                  onClick={connect}
+                >
+                  {status === "connected"
+                    ? "Reconnect"
+                    : `Connect ${formatProviderName(
+                        provider
+                      )}`}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {mode === "configure" && (
+            <>
+              <div className="provider-intro">
+                <h3>
+                  Configure your connection
+                </h3>
+
+                <p>
+                  Enter the credential generated
+                  by your provider. SignalOS stores
+                  connection secrets securely.
+                </p>
+              </div>
+
+              <div className="form-field">
+                <label>API key</label>
+
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) =>
+                    setApiKey(e.target.value)
+                  }
+                  placeholder="Paste your API key"
+                />
+              </div>
+
+              <div className="security-note">
+                <ShieldCheck size={17} />
+
+                <div>
+                  <strong>
+                    Keep control of your access
+                  </strong>
+
+                  <span>
+                    You can disconnect this integration
+                    from SignalOS at any time.
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    setMode("overview")
+                  }
+                >
+                  Back
+                </Button>
+
+                <Button
+                  loading={loading}
+                  disabled={!apiKey}
+                  onClick={configure}
+                >
+                  Save connection
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PermissionRow({ label }) {
+  return (
+    <div className="permission-row">
+      <div className="permission-check">
+        <Check size={13} />
+      </div>
+
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function AutomationPage({
+  automationEnabled,
+  updateAutomation,
+  aiMode,
+  changeAiMode
+}) {
+  return (
+    <>
+      <div className="page-header-row">
+        <div>
+          <div className="eyebrow">
+            AUTOMATION CONTROL
+          </div>
+
+          <h2>Automation</h2>
+
+          <p>
+            Decide how much SignalOS should do
+            automatically.
+          </p>
+        </div>
+      </div>
+
+      <div className="automation-banner">
+        <div className="automation-banner-icon">
+          <Zap size={20} />
+        </div>
+
+        <div>
+          <strong>
+            {automationEnabled
+              ? "Automation is active"
+              : "Automation is paused"}
+          </strong>
+
+          <span>
+            {automationEnabled
+              ? "SignalOS can execute enabled workflows."
+              : "No automated actions will be executed."}
+          </span>
+        </div>
+
+        <Toggle
+          checked={automationEnabled}
+          onChange={updateAutomation}
+        />
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h3>AI autonomy</h3>
+
+            <p>
+              Choose how independently SignalOS
+              should operate.
+            </p>
+          </div>
+        </div>
+
+        <div className="mode-grid">
+          <AutomationMode
+            active={aiMode === "manual"}
+            icon={UserRound}
+            title="Manual"
+            description="SignalOS researches and recommends. You approve actions."
+            onClick={() =>
+              changeAiMode("manual")
+            }
+          />
+
+          <AutomationMode
+            active={aiMode === "copilot"}
+            icon={Bot}
+            title="Copilot"
+            description="SignalOS prepares actions and waits for approval where appropriate."
+            onClick={() =>
+              changeAiMode("copilot")
+            }
+          />
+
+          <AutomationMode
+            active={aiMode === "autopilot"}
+            icon={Sparkles}
+            title="Autopilot"
+            description="SignalOS executes approved workflows automatically within your rules."
+            onClick={() =>
+              changeAiMode("autopilot")
+            }
+          />
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h3>Safety controls</h3>
+
+            <p>
+              Automation should always remain
+              controllable.
+            </p>
+          </div>
+        </div>
+
+        <div className="safety-list">
+          <SafetyRow
+            title="Global kill switch"
+            description="Immediately pause all automated activity."
+            enabled={automationEnabled}
+            onChange={updateAutomation}
+          />
+
+          <SafetyRow
+            title="Respect suppression lists"
+            description="Never contact people who have opted out."
+            enabled
+            locked
+          />
+
+          <SafetyRow
+            title="Require verified contact data"
+            description="Prevent SignalOS from sending to unverified addresses."
+            enabled
+            locked
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AutomationMode({
+  active,
+  icon: Icon,
+  title,
+  description,
+  onClick
+}) {
+  return (
+    <button
+      className={`mode-card ${
+        active ? "mode-active" : ""
+      }`}
+      onClick={onClick}
+    >
+      <div className="mode-icon">
+        <Icon size={20} />
+      </div>
+
+      <div>
+        <strong>{title}</strong>
+        <p>{description}</p>
+      </div>
+
+      {active && (
+        <div className="mode-check">
+          <Check size={14} />
+        </div>
+      )}
+    </button>
+  );
+}
+
+function SafetyRow({
+  title,
+  description,
+  enabled,
+  onChange,
+  locked
+}) {
+  return (
+    <div className="safety-row">
+      <div>
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+
+      <Toggle
+        checked={enabled}
+        onChange={onChange}
+        disabled={locked}
+      />
+    </div>
+  );
+}
+
+function CampaignModal({
+  onClose,
+  onCreated,
+  showToast
+}) {
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    countries: "",
+    industries: "",
+    decision_makers: "",
+    signals: "",
+    channel: "email",
+    booking_link: ""
+  });
+
+  function update(field, value) {
+    setForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  async function create() {
+    if (!form.name.trim()) {
+      showToast(
+        "Give your campaign a name first."
+      );
+      setStep(1);
       return;
     }
 
     setSaving(true);
 
     try {
-
       await api(
-        `/workspaces/${WORKSPACE_ID}/connectors/${selected.id}/configure`,
-        {
-          method: "POST",
-          body: JSON.stringify(values)
-        }
-      );
-
-      setSelected(null);
-      setValues({});
-      await load();
-
-    } catch (error) {
-
-      setError(error.message);
-
-    } finally {
-
-      setSaving(false);
-
-    }
-  };
-
-  const toggle = async (provider) => {
-
-    const connector =
-      connections[provider.id];
-
-    if (!connector) {
-      return;
-    }
-
-    try {
-
-      await api(
-        `/workspaces/${WORKSPACE_ID}/connectors/${provider.id}/configure`,
+        `/workspaces/${WS}/campaigns`,
         {
           method: "POST",
           body: JSON.stringify({
-            enabled:
-              !(connector.enabled !== false)
+            name: form.name,
+            countries: splitValues(
+              form.countries
+            ),
+            industries: splitValues(
+              form.industries
+            ),
+            decision_makers: splitValues(
+              form.decision_makers
+            ),
+            signals: splitValues(
+              form.signals
+            ),
+            channel: form.channel,
+            booking_link: form.booking_link
           })
         }
       );
 
-      await load();
-
-    } catch (error) {
-
-      setError(error.message);
-
+      await onCreated();
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setSaving(false);
     }
-  };
-
-  const disconnect = async (provider) => {
-
-    try {
-
-      await api(
-        `/workspaces/${WORKSPACE_ID}/connectors/${provider.id}`,
-        {
-          method: "DELETE"
-        }
-      );
-
-      await load();
-
-    } catch (error) {
-
-      setError(error.message);
-
-    }
-  };
+  }
 
   return (
-    <>
-      <PageHeader
-        eyebrow="PLATFORM MARKETPLACE"
-        title="Integrations"
-        description="Connect the tools your team already uses. You decide what SignalOS can access and what automation stays disabled."
-      />
+    <div className="modal-backdrop">
+      <div className="campaign-modal">
+        <div className="modal-header">
+          <div>
+            <div className="modal-eyebrow">
+              NEW CAMPAIGN
+            </div>
 
-      <div className="integrationNotice">
+            <h2>Create campaign</h2>
 
-        <ShieldCheck size={18} />
-
-        <div>
-          <b>
-            You control every connection
-          </b>
-
-          <span>
-            OAuth connections open the
-            provider authorization page.
-            API-key connections are stored
-            encrypted on the server.
-          </span>
-        </div>
-
-      </div>
-
-      {error && (
-        <div className="errorNotice">
-          {error}
-        </div>
-      )}
-
-      <div className="integrationToolbar">
-
-        <div className="searchInput">
-
-          <Search size={16} />
-
-          <input
-            value={query}
-            onChange={(event) =>
-              setQuery(event.target.value)
-            }
-            placeholder="Search integrations…"
-          />
-
-        </div>
-
-        <div className="categoryTabs">
+            <p>
+              Define the audience, buying signals
+              and activation channel.
+            </p>
+          </div>
 
           <button
-            className={
-              category === "all"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setCategory("all")
-            }
+            className="modal-close"
+            onClick={onClose}
           >
-            All
+            <X size={20} />
           </button>
+        </div>
 
-          {Object.entries(CATEGORIES).map(
-            ([key, value]) => (
-              <button
-                key={key}
-                className={
-                  category === key
-                    ? "active"
-                    : ""
+        <div className="wizard-progress">
+          {[1, 2, 3].map((number) => (
+            <div
+              key={number}
+              className={`wizard-step ${
+                step >= number
+                  ? "wizard-active"
+                  : ""
+              }`}
+            >
+              <span>{number}</span>
+
+              <label>
+                {number === 1
+                  ? "Audience"
+                  : number === 2
+                  ? "Signals"
+                  : "Activation"}
+              </label>
+            </div>
+          ))}
+        </div>
+
+        <div className="modal-body">
+          {step === 1 && (
+            <div className="wizard-content">
+              <FormField
+                label="Campaign name"
+                placeholder="e.g. SaaS founders hiring sales teams"
+                value={form.name}
+                onChange={(v) =>
+                  update("name", v)
                 }
-                onClick={() =>
-                  setCategory(key)
+              />
+
+              <FormField
+                label="Countries"
+                placeholder="India, United States, United Kingdom"
+                hint="Separate multiple values with commas."
+                value={form.countries}
+                onChange={(v) =>
+                  update("countries", v)
                 }
-              >
-                {value}
-              </button>
-            )
+              />
+
+              <FormField
+                label="Industries"
+                placeholder="SaaS, Fintech, Healthcare"
+                value={form.industries}
+                onChange={(v) =>
+                  update("industries", v)
+                }
+              />
+
+              <FormField
+                label="Decision makers"
+                placeholder="Founder, CEO, Head of Marketing"
+                value={form.decision_makers}
+                onChange={(v) =>
+                  update(
+                    "decision_makers",
+                    v
+                  )
+                }
+              />
+            </div>
           )}
 
-        </div>
+          {step === 2 && (
+            <div className="wizard-content">
+              <div className="signal-info">
+                <Sparkles size={19} />
 
-      </div>
-
-      <div className="providerGrid">
-
-        {filtered.map((provider) => {
-
-          const connector =
-            connections[provider.id];
-
-          const connected =
-            connector?.status ===
-            "CONNECTED";
-
-          const enabled =
-            connector?.enabled !== false &&
-            connected;
-
-          return (
-            <div
-              className="providerCard"
-              key={provider.id}
-            >
-
-              <div className="providerTop">
-
-                <Logo provider={provider} />
-
-                <div className="providerIdentity">
-
-                  <b>
-                    {provider.name}
-                  </b>
+                <div>
+                  <strong>
+                    Find prospects with a reason
+                    to buy now.
+                  </strong>
 
                   <span>
-                    {CATEGORIES[
-                      provider.category
-                    ]}
+                    Signals help SignalOS prioritize
+                    timing instead of simply creating
+                    another contact list.
                   </span>
-
                 </div>
-
-                {connected && (
-                  <Badge
-                    tone={
-                      enabled
-                        ? "green"
-                        : "amber"
-                    }
-                  >
-                    {enabled
-                      ? "ENABLED"
-                      : "DISABLED"}
-                  </Badge>
-                )}
-
               </div>
 
-              <p>
-                {provider.description}
-              </p>
-
-              <div className="providerBottom">
-
-                {!connected ? (
-                  <button
-                    className="btn primary"
-                    onClick={() =>
-                      connect(provider)
-                    }
-                  >
-                    <Plug size={14} />
-                    Connect
-                  </button>
-                ) : (
-                  <>
-                    <label className="toggleRow">
-
-                      <span>
-                        Allow automation
-                      </span>
-
-                      <input
-                        type="checkbox"
-                        checked={enabled}
-                        onChange={() =>
-                          toggle(provider)
-                        }
-                      />
-
-                    </label>
-
-                    <button
-                      className="btn secondary"
-                      onClick={() =>
-                        setSelected({
-                          ...provider,
-                          edit: true
-                        })
-                      }
-                    >
-                      Configure
-                    </button>
-
-                    <button
-                      className="textBtn"
-                      onClick={() =>
-                        disconnect(provider)
-                      }
-                    >
-                      Disconnect
-                    </button>
-                  </>
-                )}
-
-              </div>
-
-            </div>
-          );
-        })}
-
-      </div>
-
-      {selected && (
-        <div className="overlay">
-
-          <div className="configModal">
-
-            <header>
-
-              <div>
-
-                <div className="eyebrow">
-                  {selected.name.toUpperCase()}
-                </div>
-
-                <h2>
-                  {selected.edit
-                    ? "Connection settings"
-                    : "Configure connection"}
-                </h2>
-
-                <p>
-                  {selected.description}
-                </p>
-
-              </div>
-
-              <button
-                className="close"
-                onClick={() =>
-                  setSelected(null)
+              <FormField
+                label="Buying signals"
+                placeholder="Funding, hiring, expansion, new website, product launch"
+                hint="Separate multiple signals with commas."
+                value={form.signals}
+                onChange={(v) =>
+                  update("signals", v)
                 }
-              >
-                <X />
-              </button>
-
-            </header>
-
-            <div className="configBody">
-
-              {selected.mode === "oauth" ? (
-
-                <div className="oauthGuide">
-
-                  <Logo
-                    provider={selected}
-                    size={56}
-                  />
-
-                  <h3>
-                    OAuth authorization
-                  </h3>
-
-                  <p>
-                    Clicking Connect sends the
-                    customer to the provider.
-                    SignalOS never asks for the
-                    provider password.
-                  </p>
-
-                  <code>
-                    {API}/oauth/callback/
-                    {selected.id}
-                  </code>
-
-                  {selected.docs && (
-                    <a
-                      href={selected.docs}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Provider documentation
-                      <ExternalLink size={13} />
-                    </a>
-                  )}
-
-                </div>
-
-              ) : (
-
-                <div className="configFields">
-
-                  {(selected.fields || []).map(
-                    (field) => (
-
-                      <label
-                        className="field"
-                        key={field.name}
-                      >
-
-                        <span>
-                          {field.label}
-                          {field.required
-                            ? " *"
-                            : ""}
-                        </span>
-
-                        <input
-                          type={
-                            field.secret
-                              ? "password"
-                              : "text"
-                          }
-                          value={
-                            values[field.name] ||
-                            ""
-                          }
-                          onChange={(event) =>
-                            setValues(
-                              (current) => ({
-                                ...current,
-                                [field.name]:
-                                  event.target.value
-                              })
-                            )
-                          }
-                          placeholder={
-                            field.placeholder
-                          }
-                        />
-
-                      </label>
-                    )
-                  )}
-
-                </div>
-              )}
-
+              />
             </div>
+          )}
 
-            <footer className="wizardFoot">
-
-              <button
-                className="btn ghost"
-                onClick={() =>
-                  setSelected(null)
-                }
-              >
-                Cancel
-              </button>
-
-              {selected.mode !== "oauth" && (
-                <button
-                  className="btn primary"
-                  disabled={saving}
-                  onClick={configure}
-                >
-                  {saving ? (
-                    <RefreshCw
-                      className="spin"
-                      size={15}
-                    />
-                  ) : (
-                    <Check size={15} />
-                  )}
-
-                  Save connection
-                </button>
-              )}
-
-            </footer>
-
-          </div>
-
-        </div>
-      )}
-
-    </>
-  );
-}
-
-/* -------------------------------------------------------
-   CAMPAIGNS
-------------------------------------------------------- */
-
-function Campaigns() {
-
-  const [campaigns, setCampaigns] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [wizard, setWizard] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const load = () => {
-
-    setLoading(true);
-
-    api(
-      `/workspaces/${WORKSPACE_ID}/campaigns`
-    )
-      .then(setCampaigns)
-      .catch((error) =>
-        setError(error.message)
-      )
-      .finally(() =>
-        setLoading(false)
-      );
-  };
-
-  useEffect(load, []);
-
-  const changeStatus = async (
-    campaign,
-    status
-  ) => {
-
-    try {
-
-      await api(
-        `/workspaces/${WORKSPACE_ID}/campaigns/${campaign.id}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            status
-          })
-        }
-      );
-
-      load();
-
-    } catch (error) {
-
-      setError(error.message);
-
-    }
-  };
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="OUTBOUND ENGINE"
-        title="Campaigns"
-        description="Build, review and control autonomous outbound programs."
-        action={
-          <button
-            className="btn primary"
-            onClick={() =>
-              setWizard(true)
-            }
-          >
-            <Plus size={15} />
-            New campaign
-          </button>
-        }
-      />
-
-      {error && (
-        <div className="errorNotice">
-          {error}
-        </div>
-      )}
-
-      <div className="campaignSummary">
-
-        <Stat
-          icon={Target}
-          label="Campaigns"
-          value={campaigns.length}
-          sub="Workspace records"
-        />
-
-        <Stat
-          icon={Play}
-          label="Active"
-          value={
-            campaigns.filter(
-              (campaign) =>
-                campaign.status === "ACTIVE"
-            ).length
-          }
-          sub="Currently running"
-        />
-
-        <Stat
-          icon={Clock3}
-          label="Drafts"
-          value={
-            campaigns.filter(
-              (campaign) =>
-                campaign.status === "DRAFT"
-            ).length
-          }
-          sub="Awaiting launch"
-        />
-
-      </div>
-
-      <div className="panel">
-
-        <div className="panelHead">
-
-          <div>
-            <h2>
-              Campaign library
-            </h2>
-
-            <span>
-              Real records from the SignalOS
-              database
-            </span>
-          </div>
-
-          <button
-            className="btn secondary"
-            onClick={load}
-          >
-            <RefreshCw size={14} />
-            Refresh
-          </button>
-
-        </div>
-
-        {loading ? (
-          <div className="loading">
-            Loading campaigns…
-          </div>
-        ) : campaigns.length === 0 ? (
-          <EmptyState
-            title="No campaigns yet"
-            text="Create your first campaign. It will be saved to the live database."
-            button="Create campaign"
-            onClick={() =>
-              setWizard(true)
-            }
-          />
-        ) : (
-          <div className="campaignList">
-
-            {campaigns.map((campaign) => (
-
-              <div
-                className="campaignRow"
-                key={campaign.id}
-              >
-
-                <div className="campaignAvatar">
-                  <Send size={16} />
-                </div>
-
-                <div className="campaignMain">
-
-                  <b>
-                    {campaign.name}
-                  </b>
-
-                  <span>
-                    {campaign.channel ||
-                      "email"}{" "}
-                    ·{" "}
-                    {campaign.config
-                      ?.countries ||
-                      "Worldwide"}{" "}
-                    ·{" "}
-                    {campaign.config
-                      ?.signals?.length ||
-                      0}{" "}
-                    intent signals
-                  </span>
-
-                </div>
-
-                <Badge
-                  tone={
-                    campaign.status ===
-                    "ACTIVE"
-                      ? "green"
-                      : campaign.status ===
-                        "PAUSED"
-                      ? "amber"
-                      : ""
-                  }
-                >
-                  {campaign.status}
-                </Badge>
-
-                <div className="campaignActions">
-
-                  {campaign.status ===
-                  "ACTIVE" ? (
+          {step === 3 && (
+            <div className="wizard-content">
+              <div className="channel-options">
+                {[
+                  ["email", Mail, "Email"],
+                  [
+                    "manual",
+                    UserRound,
+                    "Manual review"
+                  ]
+                ].map(
+                  ([value, Icon, label]) => (
                     <button
-                      className="btn secondary"
+                      key={value}
+                      className={`channel-option ${
+                        form.channel === value
+                          ? "channel-selected"
+                          : ""
+                      }`}
                       onClick={() =>
-                        changeStatus(
-                          campaign,
-                          "PAUSED"
+                        update(
+                          "channel",
+                          value
                         )
                       }
                     >
-                      <Pause size={14} />
-                      Pause
+                      <Icon size={19} />
+                      <span>{label}</span>
+
+                      {form.channel ===
+                        value && (
+                        <Check size={16} />
+                      )}
                     </button>
-                  ) : (
-                    <button
-                      className="btn primary"
-                      onClick={() =>
-                        changeStatus(
-                          campaign,
-                          "ACTIVE"
-                        )
-                      }
-                    >
-                      <Play size={14} />
-                      Activate
-                    </button>
-                  )}
-
-                </div>
-
-              </div>
-            ))}
-
-          </div>
-        )}
-
-      </div>
-
-      {wizard && (
-        <CampaignWizard
-          close={() =>
-            setWizard(false)
-          }
-          saved={load}
-        />
-      )}
-
-    </>
-  );
-}
-
-/* -------------------------------------------------------
-   PROSPECTS
-------------------------------------------------------- */
-
-function Prospects() {
-
-  const [prospects, setProspects] =
-    useState([]);
-
-  const [query, setQuery] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  useEffect(() => {
-
-    api(
-      `/workspaces/${WORKSPACE_ID}/prospects`
-    )
-      .then(setProspects)
-      .finally(() =>
-        setLoading(false)
-      );
-
-  }, []);
-
-  const filtered =
-    prospects.filter((prospect) =>
-      `${prospect.name}
-       ${prospect.company || ""}
-       ${prospect.title || ""}`
-        .toLowerCase()
-        .includes(query.toLowerCase())
-    );
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="PROSPECT INTELLIGENCE"
-        title="Prospects"
-        description="Live prospects ranked from your SignalOS database."
-      />
-
-      <div className="toolbar">
-
-        <div className="searchInput">
-
-          <Search size={16} />
-
-          <input
-            value={query}
-            onChange={(event) =>
-              setQuery(event.target.value)
-            }
-            placeholder="Search people, companies, roles…"
-          />
-
-        </div>
-
-        <button className="btn secondary">
-          <Filter size={14} />
-          Filters
-        </button>
-
-      </div>
-
-      <div className="panel">
-
-        <div className="panelHead">
-
-          <div>
-            <h2>
-              All prospects
-            </h2>
-
-            <span>
-              {prospects.length} records
-            </span>
-          </div>
-
-        </div>
-
-        {loading ? (
-          <div className="loading">
-            Loading prospects…
-          </div>
-        ) : prospects.length === 0 ? (
-          <EmptyState
-            title="No prospects yet"
-            text="Prospects will appear here once your prospecting workflow is configured."
-          />
-        ) : (
-          <div className="tableWrap">
-
-            <table>
-
-              <thead>
-                <tr>
-                  <th>PROSPECT</th>
-                  <th>COMPANY</th>
-                  <th>ROLE</th>
-                  <th>FIT</th>
-                  <th>INTENT</th>
-                  <th>TOTAL</th>
-                  <th>STATUS</th>
-                </tr>
-              </thead>
-
-              <tbody>
-
-                {filtered.map(
-                  (prospect) => (
-
-                    <tr
-                      key={prospect.id}
-                    >
-
-                      <td>
-                        <b>
-                          {prospect.name}
-                        </b>
-
-                        <small>
-                          {prospect.email ||
-                            "No email"}
-                        </small>
-                      </td>
-
-                      <td>
-                        {prospect.company ||
-                          "—"}
-                      </td>
-
-                      <td>
-                        {prospect.title ||
-                          "—"}
-                      </td>
-
-                      <td>
-                        {Math.round(
-                          prospect.fit_score ||
-                            0
-                        )}
-                      </td>
-
-                      <td>
-                        {Math.round(
-                          prospect.intent_score ||
-                            0
-                        )}
-                      </td>
-
-                      <td>
-                        <strong>
-                          {Math.round(
-                            prospect.total_score ||
-                              0
-                          )}
-                        </strong>
-                      </td>
-
-                      <td>
-                        <Badge
-                          tone={
-                            prospect.status ===
-                            "QUALIFIED"
-                              ? "green"
-                              : ""
-                          }
-                        >
-                          {prospect.status ||
-                            "NEW"}
-                        </Badge>
-                      </td>
-
-                    </tr>
                   )
                 )}
+              </div>
 
-              </tbody>
-
-            </table>
-
-          </div>
-        )}
-
-      </div>
-    </>
-  );
-}
-
-/* -------------------------------------------------------
-   PLACEHOLDER
-------------------------------------------------------- */
-
-function Placeholder({ name }) {
-
-  return (
-    <EmptyState
-      title={name}
-      text="This module is connected to the SignalOS navigation. Its live workflow can be enabled without changing the rest of the platform."
-    />
-  );
-}
-
-/* -------------------------------------------------------
-   LOGO
-------------------------------------------------------- */
-
-function Logo({
-  provider,
-  size = 44
-}) {
-
-  const Icon =
-    ICONS[provider?.category] ||
-    Plug;
-
-  if (provider?.logo) {
-
-    return (
-      <img
-        className="providerLogo"
-        src={provider.logo}
-        alt={provider.name}
-        onError={(event) => {
-          event.currentTarget.style.display =
-            "none";
-        }}
-      />
-    );
-  }
-
-  return (
-    <span
-      className="logoFallback"
-      style={{
-        width: size,
-        height: size
-      }}
-    >
-      <Icon size={19} />
-    </span>
-  );
-}
-
-/* -------------------------------------------------------
-   APP
-------------------------------------------------------- */
-
-function App() {
-
-  const [active, setActive] =
-    useState("Overview");
-
-  const [sidebarOpen, setSidebarOpen] =
-    useState(true);
-
-  const [tour, setTour] =
-    useState(
-      () =>
-        localStorage.getItem(
-          "signalos_tour_done"
-        ) !== "1"
-    );
-
-  const [automation, setAutomation] =
-    useState(true);
-
-  const finishTour = () => {
-
-    localStorage.setItem(
-      "signalos_tour_done",
-      "1"
-    );
-
-    setTour(false);
-  };
-
-  let page;
-
-  if (active === "Overview") {
-    page = (
-      <Overview go={setActive} />
-    );
-  } else if (active === "Integrations") {
-    page = <Integrations />;
-  } else if (active === "Campaigns") {
-    page = <Campaigns />;
-  } else if (active === "Prospects") {
-    page = <Prospects />;
-  } else {
-    page = (
-      <Placeholder name={active} />
-    );
-  }
-
-  return (
-    <div className="app">
-
-      <aside
-        className={
-          sidebarOpen
-            ? "sidebar"
-            : "sidebar collapsed"
-        }
-      >
-
-        <div className="brand">
-
-          <span>✦</span>
-
-          {sidebarOpen && (
-            <div>
-              <b>SignalOS</b>
-
-              <small>
-                AI revenue operating system
-              </small>
+              <FormField
+                label="Booking link"
+                placeholder="https://calendly.com/..."
+                value={form.booking_link}
+                onChange={(v) =>
+                  update(
+                    "booking_link",
+                    v
+                  )
+                }
+              />
             </div>
           )}
 
-        </div>
+          <div className="wizard-actions">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (step === 1) onClose();
+                else setStep(step - 1);
+              }}
+            >
+              {step === 1 ? "Cancel" : "Back"}
+            </Button>
 
-        <button className="workspaceSwitch">
-
-          <span className="workspaceMark">
-            A
-          </span>
-
-          {sidebarOpen && (
-            <span>
-              <b>Acme Growth</b>
-              <small>Workspace</small>
-            </span>
-          )}
-
-          <ChevronDown size={14} />
-
-        </button>
-
-        <div className="navGroup">
-
-          <label>
-            WORKSPACE
-          </label>
-
-          {NAV.map(
-            ([name, Icon]) => (
-
-              <button
-                key={name}
-                className={
-                  active === name
-                    ? "nav active"
-                    : "nav"
+            {step < 3 ? (
+              <Button
+                icon={
+                  <ArrowRight size={16} />
                 }
                 onClick={() =>
-                  setActive(name)
+                  setStep(step + 1)
                 }
               >
-
-                <Icon size={16} />
-
-                {sidebarOpen && (
-                  <span>{name}</span>
-                )}
-
-              </button>
-
-            )
-          )}
-
-        </div>
-
-        <div className="navGroup">
-
-          <label>
-            SYSTEM
-          </label>
-
-          <button
-            className={
-              active === "Integrations"
-                ? "nav active"
-                : "nav"
-            }
-            onClick={() =>
-              setActive("Integrations")
-            }
-          >
-            <Plug size={16} />
-
-            {sidebarOpen && (
-              <span>
-                Integrations
-              </span>
-            )}
-          </button>
-
-          <button
-            className={
-              active === "Suppression"
-                ? "nav active"
-                : "nav"
-            }
-            onClick={() =>
-              setActive("Suppression")
-            }
-          >
-            <ShieldCheck size={16} />
-
-            {sidebarOpen && (
-              <span>
-                Suppression
-              </span>
-            )}
-          </button>
-
-          <button
-            className={
-              active === "Settings"
-                ? "nav active"
-                : "nav"
-            }
-            onClick={() =>
-              setActive("Settings")
-            }
-          >
-            <Settings size={16} />
-
-            {sidebarOpen && (
-              <span>
-                Settings
-              </span>
-            )}
-          </button>
-
-        </div>
-
-        <div className="sidebarBottom">
-
-          <span
-            className={
-              automation
-                ? "liveDot"
-                : "pausedDot"
-            }
-          />
-
-          {sidebarOpen && (
-            <>
-              <span>
-                {automation
-                  ? "Automation active"
-                  : "Automation paused"}
-              </span>
-
-              <Badge
-                tone={
-                  automation
-                    ? "green"
-                    : "amber"
-                }
+                Continue
+              </Button>
+            ) : (
+              <Button
+                loading={saving}
+                icon={<Check size={16} />}
+                onClick={create}
               >
-                {automation
-                  ? "LIVE"
-                  : "PAUSED"}
-              </Badge>
-            </>
-          )}
-
+                Create campaign
+              </Button>
+            )}
+          </div>
         </div>
-
-      </aside>
-
-      <main className="main">
-
-        <header className="topbar">
-
-          <div className="topLeft">
-
-            <button
-              className="iconBtn"
-              onClick={() =>
-                setSidebarOpen(
-                  !sidebarOpen
-                )
-              }
-            >
-              <Menu size={18} />
-            </button>
-
-            <span>
-              Workspace /{" "}
-              <b>{active}</b>
-            </span>
-
-          </div>
-
-          <div className="topRight">
-
-            <button
-              className={
-                automation
-                  ? "automationButton"
-                  : "automationButton paused"
-              }
-              onClick={() =>
-                setAutomation(!automation)
-              }
-            >
-
-              {automation ? (
-                <Play size={14} />
-              ) : (
-                <Pause size={14} />
-              )}
-
-              {automation
-                ? "Automation active"
-                : "Automation paused"}
-
-            </button>
-
-            <div className="globalSearch">
-
-              <Search size={14} />
-
-              <span>
-                Search SignalOS
-              </span>
-
-              <kbd>
-                ⌘ K
-              </kbd>
-
-            </div>
-
-            <button className="iconBtn">
-              <Bell size={17} />
-            </button>
-
-            <div className="avatar">
-              JW
-            </div>
-
-          </div>
-
-        </header>
-
-        <section className="content">
-          {page}
-        </section>
-
-      </main>
-
-      {tour && (
-        <Onboarding
-          onFinish={finishTour}
-        />
-      )}
-
+      </div>
     </div>
   );
 }
 
-createRoot(
-  document.getElementById("root")
-).render(<App />);
+function FormField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  hint
+}) {
+  return (
+    <div className="form-field">
+      <label>{label}</label>
+
+      <input
+        value={value}
+        onChange={(e) =>
+          onChange(e.target.value)
+        }
+        placeholder={placeholder}
+      />
+
+      {hint && <span>{hint}</span>}
+    </div>
+  );
+}
+
+function Onboarding({
+  step,
+  setStep,
+  onSkip,
+  onFinish,
+  navigate
+}) {
+  const steps = [
+    {
+      icon: Sparkles,
+      eyebrow: "WELCOME TO SIGNALOS",
+      title: "Your AI prospecting command center.",
+      description:
+        "SignalOS helps you find relevant buyers, understand why they may buy now, activate outreach and measure what happens next."
+    },
+    {
+      icon: Target,
+      eyebrow: "STEP 1 · INTELLIGENCE",
+      title: "Start with the right prospects.",
+      description:
+        "Define your ICP, target markets and buying signals. SignalOS prioritizes prospects based on fit, evidence and timing."
+    },
+    {
+      icon: Link2,
+      eyebrow: "STEP 2 · CONNECT",
+      title: "Bring your existing stack.",
+      description:
+        "Connect email, calendars, CRM, AI and enrichment providers. You choose which systems SignalOS can use."
+    },
+    {
+      icon: Zap,
+      eyebrow: "STEP 3 · AUTOMATE",
+      title: "Choose how autonomous SignalOS should be.",
+      description:
+        "Use Manual, Copilot or Autopilot. You can pause every automated action instantly with the global automation switch."
+    }
+  ];
+
+  const current = steps[step];
+  const Icon = current.icon;
+
+  return (
+    <div className="onboarding-backdrop">
+      <div className="onboarding-card">
+        <div className="onboarding-top">
+          <div className="onboarding-logo">
+            S
+          </div>
+
+          <button onClick={onSkip}>
+            Skip tour
+          </button>
+        </div>
+
+        <div className="onboarding-visual">
+          <div className="onboarding-orb">
+            <Icon size={32} />
+          </div>
+
+          <div className="onboarding-lines">
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
+
+        <div className="onboarding-copy">
+          <div className="eyebrow">
+            {current.eyebrow}
+          </div>
+
+          <h2>{current.title}</h2>
+
+          <p>
+            {current.description}
+          </p>
+        </div>
+
+        <div className="onboarding-dots">
+          {steps.map((_, index) => (
+            <button
+              key={index}
+              className={
+                index === step
+                  ? "dot-active"
+                  : ""
+              }
+              onClick={() =>
+                setStep(index)
+              }
+            />
+          ))}
+        </div>
+
+        <div className="onboarding-actions">
+          <button
+            className="text-button"
+            onClick={onSkip}
+          >
+            Skip for now
+          </button>
+
+          {step < steps.length - 1 ? (
+            <Button
+              icon={<ArrowRight size={16} />}
+              onClick={() =>
+                setStep(step + 1)
+              }
+            >
+              Continue
+            </Button>
+          ) : (
+            <Button
+              icon={<ArrowRight size={16} />}
+              onClick={() => {
+                navigate("integrations");
+                onFinish();
+              }}
+            >
+              Start building
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlaceholderPage({
+  title,
+  icon: Icon,
+  description
+}) {
+  return (
+    <div className="panel placeholder-panel">
+      <div className="placeholder-icon">
+        <Icon size={24} />
+      </div>
+
+      <h2>{title}</h2>
+
+      <p>{description}</p>
+
+      <Badge tone="orange">
+        SignalOS module
+      </Badge>
+    </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="loading-screen">
+      <div className="loading-spinner" />
+
+      <strong>
+        Loading SignalOS...
+      </strong>
+
+      <span>
+        Connecting to your workspace.
+      </span>
+    </div>
+  );
+}
+
+function splitValues(value) {
+  return value
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+export default App;
