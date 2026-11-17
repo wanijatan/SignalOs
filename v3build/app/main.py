@@ -1,33 +1,21 @@
 from __future__ import annotations
 
-import os
-import json
 import base64
 import hashlib
-import urllib.request
-import urllib.parse
-
+import json
+import os
 from datetime import datetime, timezone
+from typing import Any
+from urllib.parse import urlencode
+from urllib.request import Request as URLRequest, urlopen
+from urllib.error import HTTPError
 
-from fastapi import (
-    FastAPI,
-    Depends,
-    HTTPException,
-    Request,
-)
-
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from database import (
-    Base,
-    engine,
-    get_db,
-)
-
+from database import Base, engine, get_db
 from models import (
     Workspace,
     Company,
@@ -43,25 +31,28 @@ from models import (
 from integrations import (
     PROVIDERS,
     provider_by_id,
-    auth_url,
+    build_authorization_url,
+    oauth_config,
 )
 
 
 APP_URL = os.getenv(
     "APP_URL",
-    "https://signalos-api-15va.onrender.com",
+    "https://signalos-api-15va.onrender.com"
 ).rstrip("/")
-
 
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
-    "https://signal-os-git.vercel.app",
+    "https://signal-os-git.vercel.app"
 ).rstrip("/")
+
+WS_ID = 1
 
 
 app = FastAPI(
-    title="SignalOS API",
-    version="6.0.0",
+    title="SignalOS AI Prospecting & Outbound OS",
+    version="6.1.0",
+    description="Private AI Prospecting and Outbound Operating System",
 )
 
 
@@ -74,1008 +65,1161 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(
-        bind=engine,
-    )
-
-    db = next(get_db())
-
-    try:
-        ensure_workspace(
-            db,
-            1,
-        )
-    finally:
-        db.close()
-
+# ============================================================
+# HELPERS
+# ============================================================
 
 def now():
     return datetime.now(timezone.utc)
 
 
-def ser(obj):
-    data = {}
+def settings_dict(ws: Workspace) -> dict[str, Any]:
 
-    for column in obj.__table__.columns:
-        value = getattr(
-            obj,
-            column.name,
-        )
+    value = dict(ws.settings or {})
 
-        if isinstance(
-            value,
-            datetime,
-        ):
-            value = value.isoformat()
+    value.setdefault(
+        "onboarding_completed",
+        False
+    )
 
-        data[column.name] = value
+    value.setdefault(
+        "ai_mode",
+        "copilot"
+    )
 
-    return data
+    value.setdefault(
+        "automation_enabled",
+        False
+    )
+
+    value.setdefault(
+        "timezone",
+        "Asia/Kolkata"
+    )
+
+    value.setdefault(
+        "llm_provider",
+        ""
+    )
+
+    value.setdefault(
+        "llm_model",
+        ""
+    )
+
+    value.setdefault(
+        "signals",
+        []
+    )
+
+    return value
 
 
 def ensure_workspace(
-    db,
-    wid=1,
-):
-    workspace = db.get(
+    db: Session,
+    workspace_id: int = WS_ID
+) -> Workspace:
+
+    ws = db.get(
         Workspace,
-        wid,
+        workspace_id
     )
 
-    if not workspace:
-        workspace = Workspace(
-            id=wid,
+    if not ws:
+
+        ws = Workspace(
+            id=workspace_id,
             name="SignalOS Workspace",
             owner_name="Workspace Owner",
+            owner_email="",
             settings={
                 "onboarding_completed": False,
                 "ai_mode": "copilot",
                 "automation_enabled": False,
                 "timezone": "Asia/Kolkata",
+                "llm_provider": "",
+                "llm_model": "",
+                "signals": [],
             },
         )
 
-        db.add(workspace)
+        db.add(ws)
         db.commit()
-        db.refresh(workspace)
+        db.refresh(ws)
 
-    return workspace
+    else:
+
+        settings = settings_dict(ws)
+
+        if ws.settings != settings:
+
+            ws.settings = settings
+
+            db.commit()
+
+    return ws
 
 
-def activity(
-    db,
-    wid,
-    title,
-    detail="",
-    kind="system",
-    severity="info",
+def require_onboarded(
+    workspace_id: int,
+    db: Session
 ):
+
+    ws = ensure_workspace(
+        db,
+        workspace_id
+    )
+
+    if not settings_dict(ws).get(
+        "onboarding_completed"
+    ):
+
+        raise HTTPException(
+            status_code=428,
+            detail=(
+                "Complete SignalOS setup "
+                "before using the workspace."
+            ),
+        )
+
+    return ws
+
+
+def serialize(obj):
+
+    if obj is None:
+        return None
+
+    output = {}
+
+    for column in obj.__table__.columns:
+
+        value = getattr(
+            obj,
+            column.name
+        )
+
+        if isinstance(
+            value,
+            datetime
+        ):
+            value = value.isoformat()
+
+        output[column.name] = value
+
+    return output
+
+
+def log_activity(
+    db: Session,
+    workspace_id: int,
+    kind: str,
+    title: str,
+    detail: str = "",
+    severity: str = "info",
+):
+
     db.add(
         Activity(
-            workspace_id=wid,
+            workspace_id=workspace_id,
+            kind=kind,
             title=title,
             detail=detail,
-            kind=kind,
             severity=severity,
         )
     )
 
-    db.commit()
 
-
-def notification(
-    db,
-    wid,
-    title,
-    body="",
-    typ="system",
+def notify(
+    db: Session,
+    workspace_id: int,
+    title: str,
+    body: str,
+    type_: str = "system",
 ):
+
     db.add(
         Notification(
-            workspace_id=wid,
+            workspace_id=workspace_id,
+            type=type_,
             title=title,
             body=body,
-            type=typ,
+            read=False,
         )
     )
 
-    db.commit()
+
+def connector_view(
+    row,
+    provider
+):
+
+    result = dict(provider)
+
+    result.update({
+
+        "status":
+            row.status
+            if row
+            else "AVAILABLE",
+
+        "connected":
+            bool(
+                row
+                and row.status == "CONNECTED"
+            ),
+
+        "enabled":
+            bool(row.enabled)
+            if row
+            else False,
+
+        "configured":
+            bool(row),
+
+        "connected_at":
+            row.connected_at.isoformat()
+            if row
+            and row.connected_at
+            else None,
+    })
+
+    return result
 
 
-def protect(
-    value: str,
-) -> str:
-    try:
-        from cryptography.fernet import Fernet
+# ============================================================
+# CREDENTIAL ENCRYPTION
+# ============================================================
 
-        key = base64.urlsafe_b64encode(
-            hashlib.sha256(
-                os.getenv(
-                    "SECRET_KEY",
-                    "change-me",
-                ).encode()
-            ).digest()
+def secret_key():
+
+    value = os.getenv(
+        "SECRET_KEY",
+        "signalos-development-secret"
+    )
+
+    return hashlib.sha256(
+        value.encode()
+    ).digest()
+
+
+def encrypt_text(
+    value: str
+):
+
+    key = secret_key()
+
+    data = value.encode()
+
+    encrypted = bytes(
+        data[index]
+        ^ key[index % len(key)]
+        for index in range(len(data))
+    )
+
+    return base64.urlsafe_b64encode(
+        encrypted
+    ).decode()
+
+
+# ============================================================
+# OAUTH TOKEN EXCHANGE
+# ============================================================
+
+def token_exchange(
+    provider_id: str,
+    code: str
+):
+
+    config = oauth_config(
+        provider_id
+    )
+
+    if not config:
+
+        raise ValueError(
+            f"OAuth credentials are not configured for {provider_id}."
         )
 
-        return Fernet(key).encrypt(
-            value.encode()
-        ).decode()
+    data = {
 
-    except Exception:
-        return base64.urlsafe_b64encode(
-            value.encode()
-        ).decode()
+        "client_id":
+            config["client_id"],
 
+        "client_secret":
+            config["client_secret"],
+
+        "code":
+            code,
+
+        "redirect_uri":
+            config["redirect_uri"],
+
+        "grant_type":
+            "authorization_code",
+    }
+
+    request = URLRequest(
+
+        config["token_url"],
+
+        data=urlencode(data).encode(),
+
+        headers={
+            "Content-Type":
+                "application/x-www-form-urlencoded"
+        },
+
+        method="POST",
+    )
+
+    try:
+
+        with urlopen(
+            request,
+            timeout=20
+        ) as response:
+
+            return json.loads(
+                response.read().decode()
+            )
+
+    except HTTPError as error:
+
+        detail = error.read().decode(
+            errors="ignore"
+        )
+
+        raise ValueError(
+            f"{provider_id} OAuth token exchange failed: "
+            f"{detail[:500]}"
+        )
+
+
+# ============================================================
+# STARTUP
+# ============================================================
+
+@app.on_event("startup")
+def startup():
+
+    Base.metadata.create_all(
+        bind=engine
+    )
+
+    db = next(
+        get_db()
+    )
+
+    try:
+
+        ensure_workspace(
+            db
+        )
+
+    finally:
+
+        db.close()
+
+
+# ============================================================
+# BASIC
+# ============================================================
 
 @app.get("/")
 def root():
+
     return {
-        "name": "SignalOS API",
-        "version": "6.0.0",
-        "status": "online",
-        "docs": "/docs",
+        "name":
+            "SignalOS API",
+
+        "version":
+            "6.1.0",
+
+        "status":
+            "online",
+
+        "docs":
+            "/docs",
     }
 
 
 @app.get("/health")
 def health(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
+
     try:
-        db.execute(
-            text("SELECT 1")
-        )
 
         ensure_workspace(
-            db,
-            1,
+            db
         )
 
         return {
-            "ok": True,
-            "database": "connected",
-            "api": "online",
-            "version": "6.0.0",
+            "ok":
+                True,
+
+            "database":
+                "connected",
+
+            "api":
+                "online",
         }
 
-    except Exception as exc:
+    except Exception as error:
+
         return {
-            "ok": False,
-            "database": "error",
-            "api": "online",
-            "error": str(exc),
-        }
-
-
-@app.get("/workspaces/{wid}/dashboard")
-def dashboard(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    return {
-        "metrics": {
-            "prospects": db.query(Prospect)
-            .filter_by(workspace_id=wid)
-            .count(),
-
-            "companies": db.query(Company)
-            .filter_by(workspace_id=wid)
-            .count(),
-
-            "campaigns": db.query(Campaign)
-            .filter_by(workspace_id=wid)
-            .count(),
-
-            "interactions": db.query(Activity)
-            .filter_by(workspace_id=wid)
-            .count(),
-
-            "connected_integrations": db.query(Connector)
-            .filter_by(
-                workspace_id=wid,
-                status="CONNECTED",
-                enabled=True,
-            )
-            .count(),
-        },
-
-        "workspace": ser(
-            db.get(
-                Workspace,
-                wid,
-            )
-        ),
-    }
-
-
-@app.get("/workspaces/{wid}/onboarding")
-def onboarding(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    workspace = ensure_workspace(
-        db,
-        wid,
-    )
-
-    settings = workspace.settings or {}
-
-    return {
-        "completed": bool(
-            settings.get(
-                "onboarding_completed"
-            )
-        ),
-        "ai_mode": settings.get(
-            "ai_mode",
-            "copilot",
-        ),
-        "automation_enabled": bool(
-            settings.get(
-                "automation_enabled",
+            "ok":
                 False,
-            )
-        ),
+
+            "database":
+                "error",
+
+            "api":
+                "online",
+
+            "error":
+                str(error),
+        }
+
+
+# ============================================================
+# PROVIDERS
+# ============================================================
+
+@app.get("/providers")
+def providers():
+
+    return {
+        "providers":
+            PROVIDERS
     }
 
 
-@app.post("/workspaces/{wid}/onboarding/complete")
-def onboarding_complete(
-    wid: int,
-    db: Session = Depends(get_db),
+# ============================================================
+# ONBOARDING
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/onboarding"
+)
+def get_onboarding(
+    workspace_id: int,
+    db: Session = Depends(get_db)
 ):
+
     workspace = ensure_workspace(
         db,
-        wid,
+        workspace_id
     )
 
-    settings = dict(
-        workspace.settings or {}
+    settings = settings_dict(
+        workspace
     )
 
-    settings["onboarding_completed"] = True
+    connectors = db.query(
+        Connector
+    ).filter(
+        Connector.workspace_id
+        == workspace_id,
 
-    workspace.settings = settings
+        Connector.status
+        == "CONNECTED"
+    ).all()
 
-    db.commit()
-
-    return {
-        "ok": True,
+    connected = {
+        connector.provider
+        for connector in connectors
     }
 
-
-@app.patch("/workspaces/{wid}/automation")
-def automation(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    workspace = ensure_workspace(
-        db,
-        wid,
-    )
-
-    settings = dict(
-        workspace.settings or {}
-    )
-
-    settings["automation_enabled"] = bool(
-        payload.get(
-            "enabled",
-            False,
-        )
-    )
-
-    settings["ai_mode"] = payload.get(
-        "mode",
-        settings.get(
-            "ai_mode",
-            "copilot",
-        ),
-    )
-
-    workspace.settings = settings
-
-    db.commit()
-
-    activity(
-        db,
-        wid,
-        "Automation settings updated",
-        f"Mode: {settings['ai_mode']}; "
-        f"enabled: {settings['automation_enabled']}",
-        "automation",
-    )
-
     return {
-        "ok": True,
-        "settings": settings,
-    }
 
-
-@app.get("/workspaces/{wid}/settings")
-def settings_get(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    workspace = ensure_workspace(
-        db,
-        wid,
-    )
-
-    return {
-        "workspace": ser(workspace),
-        "settings": workspace.settings or {},
-    }
-
-
-@app.patch("/workspaces/{wid}/settings")
-def settings_patch(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    workspace = ensure_workspace(
-        db,
-        wid,
-    )
-
-    settings = dict(
-        workspace.settings or {}
-    )
-
-    settings.update(
-        payload.get(
-            "settings",
-            payload,
-        )
-    )
-
-    workspace.name = settings.pop(
-        "workspace_name",
-        workspace.name,
-    )
-
-    workspace.owner_name = settings.pop(
-        "owner_name",
-        workspace.owner_name,
-    )
-
-    workspace.owner_email = settings.pop(
-        "owner_email",
-        workspace.owner_email,
-    )
-
-    workspace.settings = settings
-
-    db.commit()
-
-    activity(
-        db,
-        wid,
-        "Workspace settings updated",
-    )
-
-    return {
-        "workspace": ser(workspace),
-        "settings": settings,
-    }
-
-
-@app.get("/workspaces/{wid}/notifications")
-def notifications(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    rows = (
-        db.query(Notification)
-        .filter_by(workspace_id=wid)
-        .order_by(
-            Notification.created_at.desc()
-        )
-        .limit(100)
-        .all()
-    )
-
-    return {
-        "notifications": [
-            ser(row)
-            for row in rows
-        ]
-    }
-
-
-@app.post("/workspaces/{wid}/notifications/read")
-def notifications_read(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    rows = (
-        db.query(Notification)
-        .filter_by(workspace_id=wid)
-        .all()
-    )
-
-    ids = set(
-        payload.get(
-            "ids",
-            [],
-        )
-    )
-
-    for row in rows:
-        if not ids or row.id in ids:
-            row.read = True
-
-    db.commit()
-
-    return {
-        "ok": True,
-    }
-
-
-@app.get("/workspaces/{wid}/activity")
-def activity_list(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    rows = (
-        db.query(Activity)
-        .filter_by(workspace_id=wid)
-        .order_by(
-            Activity.created_at.desc()
-        )
-        .limit(100)
-        .all()
-    )
-
-    return {
-        "activity": [
-            ser(row)
-            for row in rows
-        ]
-    }
-
-
-@app.get("/workspaces/{wid}/prospects")
-def prospects(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    rows = (
-        db.query(Prospect)
-        .filter_by(workspace_id=wid)
-        .order_by(
-            Prospect.created_at.desc()
-        )
-        .all()
-    )
-
-    return {
-        "prospects": [
-            ser(row)
-            for row in rows
-        ]
-    }
-
-
-@app.post("/workspaces/{wid}/prospects")
-def prospect_create(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    prospect = Prospect(
-        workspace_id=wid,
-        name=payload.get(
-            "name",
-            "Unnamed",
-        ),
-        email=payload.get(
-            "email",
-            "",
-        ),
-        title=payload.get(
-            "title",
-            "",
-        ),
-        country=payload.get(
-            "country",
-            "",
-        ),
-        score=int(
-            payload.get(
-                "score",
-                0,
-            )
-        ),
-        status=payload.get(
-            "status",
-            "NEW",
-        ),
-        intent=payload.get(
-            "intent",
-            "",
-        ),
-        evidence=payload.get(
-            "evidence",
-            "",
-        ),
-        source=payload.get(
-            "source",
-            "manual",
-        ),
-    )
-
-    db.add(prospect)
-    db.commit()
-    db.refresh(prospect)
-
-    activity(
-        db,
-        wid,
-        "Prospect added",
-        prospect.name,
-        "prospecting",
-    )
-
-    return ser(prospect)
-
-
-@app.get("/workspaces/{wid}/companies")
-def companies(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    return {
-        "companies": [
-            ser(row)
-            for row in (
-                db.query(Company)
-                .filter_by(workspace_id=wid)
-                .order_by(
-                    Company.created_at.desc()
+        "completed":
+            bool(
+                settings.get(
+                    "onboarding_completed"
                 )
-                .all()
-            )
-        ]
-    }
+            ),
 
+        "settings":
+            settings,
 
-@app.post("/workspaces/{wid}/companies")
-def company_create(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
+        "connected_integrations":
+            list(connected),
 
-    company = Company(
-        workspace_id=wid,
-        name=payload.get(
-            "name",
-            "Unnamed",
-        ),
-        domain=payload.get(
-            "domain",
-            "",
-        ),
-        industry=payload.get(
-            "industry",
-            "",
-        ),
-        country=payload.get(
-            "country",
-            "",
-        ),
-        size=payload.get(
-            "size",
-            "",
-        ),
-        website=payload.get(
-            "website",
-            "",
-        ),
-    )
+        "steps": [
 
-    db.add(company)
-    db.commit()
-    db.refresh(company)
-
-    activity(
-        db,
-        wid,
-        "Company added",
-        company.name,
-        "company",
-    )
-
-    return ser(company)
-
-
-@app.get("/workspaces/{wid}/campaigns")
-def campaigns(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    return {
-        "campaigns": [
-            ser(row)
-            for row in (
-                db.query(Campaign)
-                .filter_by(workspace_id=wid)
-                .order_by(
-                    Campaign.created_at.desc()
-                )
-                .all()
-            )
-        ]
-    }
-
-
-@app.post("/workspaces/{wid}/campaigns")
-def campaign_create(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    name = (
-        payload.get(
-            "name",
-            "",
-        )
-        .strip()
-    )
-
-    if not name:
-        raise HTTPException(
-            422,
-            "Campaign name is required",
-        )
-
-    campaign = Campaign(
-        workspace_id=wid,
-        name=name,
-        status="DRAFT",
-        countries=payload.get(
-            "countries",
-            "",
-        ),
-        industries=payload.get(
-            "industries",
-            "",
-        ),
-        decision_makers=payload.get(
-            "decision_makers",
-            "",
-        ),
-        signals=payload.get(
-            "signals",
-            "",
-        ),
-        channel=payload.get(
-            "channel",
-            "Email",
-        ),
-        booking_link=payload.get(
-            "booking_link",
-            "",
-        ),
-        daily_limit=int(
-            payload.get(
-                "daily_limit",
-                25,
-            )
-        ),
-    )
-
-    db.add(campaign)
-    db.commit()
-    db.refresh(campaign)
-
-    activity(
-        db,
-        wid,
-        "Campaign created",
-        name,
-        "campaign",
-    )
-
-    notification(
-        db,
-        wid,
-        "Campaign created",
-        name,
-        "campaign",
-    )
-
-    return ser(campaign)
-
-
-@app.patch("/workspaces/{wid}/campaigns/{cid}")
-def campaign_patch(
-    wid: int,
-    cid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    campaign = (
-        db.query(Campaign)
-        .filter_by(
-            id=cid,
-            workspace_id=wid,
-        )
-        .first()
-    )
-
-    if not campaign:
-        raise HTTPException(
-            404,
-            "Campaign not found",
-        )
-
-    if "status" in payload:
-        campaign.status = payload["status"]
-
-    for key in (
-        "name",
-        "countries",
-        "industries",
-        "decision_makers",
-        "signals",
-        "channel",
-        "booking_link",
-        "daily_limit",
-    ):
-        if key in payload:
-            setattr(
-                campaign,
-                key,
-                payload[key],
-            )
-
-    db.commit()
-
-    activity(
-        db,
-        wid,
-        "Campaign updated",
-        campaign.name,
-        "campaign",
-    )
-
-    return ser(campaign)
-
-
-@app.get("/workspaces/{wid}/connectors")
-def connectors(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    ensure_workspace(
-        db,
-        wid,
-    )
-
-    rows = (
-        db.query(Connector)
-        .filter_by(workspace_id=wid)
-        .all()
-    )
-
-    mapping = {
-        row.provider: row
-        for row in rows
-    }
-
-    output = []
-
-    for provider in PROVIDERS:
-        row = mapping.get(
-            provider["id"]
-        )
-
-        item = dict(provider)
-
-        item.update(
             {
-                "status": (
-                    row.status
-                    if row
-                    else "AVAILABLE"
-                ),
-                "enabled": (
-                    bool(row.enabled)
-                    if row
-                    else False
-                ),
-                "configured": bool(row),
-                "connected_at": (
-                    row.connected_at.isoformat()
-                    if row and row.connected_at
-                    else None
-                ),
-                "last_error": (
-                    (row.config or {}).get(
-                        "last_error"
-                    )
-                    if row
-                    else None
-                ),
-            }
-        )
+                "id":
+                    "workspace",
 
-        output.append(item)
+                "label":
+                    "Workspace",
 
-    return {
-        "connectors": output
+                "complete":
+                    bool(workspace.name),
+            },
+
+            {
+                "id":
+                    "ai",
+
+                "label":
+                    "AI / LLM",
+
+                "complete":
+                    any(
+                        x in connected
+                        for x in [
+                            "openai",
+                            "anthropic",
+                            "gemini",
+                            "openrouter",
+                        ]
+                    ),
+            },
+
+            {
+                "id":
+                    "email",
+
+                "label":
+                    "Email",
+
+                "complete":
+                    any(
+                        x in connected
+                        for x in [
+                            "gmail",
+                            "microsoft365",
+                            "resend",
+                            "sendgrid",
+                            "mailgun",
+                        ]
+                    ),
+            },
+
+            {
+                "id":
+                    "calendar",
+
+                "label":
+                    "Calendar",
+
+                "complete":
+                    any(
+                        x in connected
+                        for x in [
+                            "google_calendar",
+                            "outlook_calendar",
+                            "calendly",
+                        ]
+                    ),
+            },
+        ],
     }
 
 
 @app.post(
-    "/workspaces/{wid}/connectors/{pid}/connect"
+    "/workspaces/{workspace_id}/onboarding/complete"
 )
-def connector_connect(
-    wid: int,
-    pid: str,
+def complete_onboarding(
+    workspace_id: int,
+    payload: dict[str, Any] | None = None,
     db: Session = Depends(get_db),
 ):
-    provider = provider_by_id(pid)
 
-    if not provider:
-        raise HTTPException(
-            404,
-            "Provider not found",
-        )
-
-    row = (
-        db.query(Connector)
-        .filter_by(
-            workspace_id=wid,
-            provider=pid,
-            name=provider["name"],
-        )
-        .first()
+    workspace = ensure_workspace(
+        db,
+        workspace_id
     )
 
+    payload = payload or {}
+
+    if payload.get("name"):
+
+        workspace.name = str(
+            payload["name"]
+        ).strip()
+
+    if payload.get("owner_name"):
+
+        workspace.owner_name = str(
+            payload["owner_name"]
+        ).strip()
+
+    settings = settings_dict(
+        workspace
+    )
+
+    settings["onboarding_completed"] = True
+
+    if payload.get("timezone"):
+
+        settings["timezone"] = payload[
+            "timezone"
+        ]
+
+    if payload.get("ai_mode") in {
+        "manual",
+        "copilot",
+        "autopilot",
+    }:
+
+        settings["ai_mode"] = payload[
+            "ai_mode"
+        ]
+
+    # NEVER enable automation during onboarding.
+
+    settings["automation_enabled"] = False
+
+    workspace.settings = settings
+
+    log_activity(
+        db,
+        workspace_id,
+        "onboarding",
+        "Workspace setup completed",
+        "SignalOS mandatory onboarding was completed.",
+    )
+
+    notify(
+        db,
+        workspace_id,
+        "Setup complete",
+        "Your SignalOS workspace is ready.",
+        "onboarding",
+    )
+
+    db.commit()
+    db.refresh(workspace)
+
+    return {
+        "ok":
+            True,
+
+        "completed":
+            True,
+
+        "workspace":
+            serialize(workspace),
+
+        "settings":
+            settings,
+    }
+
+
+# ============================================================
+# AUTOMATION
+# ============================================================
+
+@app.patch(
+    "/workspaces/{workspace_id}/automation"
+)
+def update_automation(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    settings = settings_dict(
+        workspace
+    )
+
+    mode = payload.get(
+        "mode",
+        settings["ai_mode"]
+    )
+
+    enabled = bool(
+        payload.get(
+            "enabled",
+            settings["automation_enabled"]
+        )
+    )
+
+    if mode not in {
+        "manual",
+        "copilot",
+        "autopilot",
+    }:
+
+        raise HTTPException(
+            400,
+            "Mode must be manual, copilot or autopilot."
+        )
+
+    settings["ai_mode"] = mode
+    settings["automation_enabled"] = enabled
+
+    workspace.settings = settings
+
+    log_activity(
+        db,
+        workspace_id,
+        "automation",
+        f"Automation mode changed to {mode}",
+        (
+            "Master automation "
+            f"{'enabled' if enabled else 'paused'}."
+        ),
+    )
+
+    db.commit()
+
+    return {
+        "ok":
+            True,
+
+        "settings":
+            settings,
+    }
+
+
+# ============================================================
+# WORKSPACE
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}"
+)
+def get_workspace(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    return {
+        "workspace":
+            serialize(workspace),
+
+        "settings":
+            settings_dict(workspace),
+    }
+
+
+@app.patch(
+    "/workspaces/{workspace_id}"
+)
+def update_workspace(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    for field in [
+        "name",
+        "owner_name",
+        "owner_email",
+    ]:
+
+        if field in payload:
+
+            setattr(
+                workspace,
+                field,
+                payload[field]
+            )
+
+    if isinstance(
+        payload.get("settings"),
+        dict
+    ):
+
+        settings = settings_dict(
+            workspace
+        )
+
+        settings.update(
+            payload["settings"]
+        )
+
+        workspace.settings = settings
+
+    db.commit()
+    db.refresh(workspace)
+
+    return {
+        "workspace":
+            serialize(workspace),
+
+        "settings":
+            settings_dict(workspace),
+    }
+
+
+# ============================================================
+# SETTINGS
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/settings"
+)
+def get_settings(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    return {
+        "workspace":
+            serialize(workspace),
+
+        "settings":
+            settings_dict(workspace),
+    }
+
+
+@app.patch(
+    "/workspaces/{workspace_id}/settings"
+)
+def save_settings(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    for field in [
+        "name",
+        "owner_name",
+        "owner_email",
+    ]:
+
+        if field in payload:
+
+            setattr(
+                workspace,
+                field,
+                payload[field]
+            )
+
+    if isinstance(
+        payload.get("settings"),
+        dict
+    ):
+
+        settings = settings_dict(
+            workspace
+        )
+
+        settings.update(
+            payload["settings"]
+        )
+
+        workspace.settings = settings
+
+    log_activity(
+        db,
+        workspace_id,
+        "settings",
+        "Workspace settings updated",
+    )
+
+    db.commit()
+    db.refresh(workspace)
+
+    return {
+        "ok":
+            True,
+
+        "workspace":
+            serialize(workspace),
+
+        "settings":
+            settings_dict(workspace),
+    }
+
+
+# ============================================================
+# DASHBOARD
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/dashboard"
+)
+def dashboard(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    connected = db.query(
+        Connector
+    ).filter(
+        Connector.workspace_id
+        == workspace_id,
+
+        Connector.status
+        == "CONNECTED",
+
+        Connector.enabled
+        == True
+    ).count()
+
+    return {
+        "metrics": {
+
+            "prospects":
+                db.query(
+                    Prospect
+                ).filter_by(
+                    workspace_id=workspace_id
+                ).count(),
+
+            "companies":
+                db.query(
+                    Company
+                ).filter_by(
+                    workspace_id=workspace_id
+                ).count(),
+
+            "campaigns":
+                db.query(
+                    Campaign
+                ).filter_by(
+                    workspace_id=workspace_id
+                ).count(),
+
+            "interactions":
+                0,
+
+            "connected_integrations":
+                connected,
+        }
+    }
+
+
+# ============================================================
+# INTEGRATIONS
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/connectors"
+)
+def connectors(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    rows = db.query(
+        Connector
+    ).filter(
+        Connector.workspace_id
+        == workspace_id
+    ).all()
+
+    lookup = {
+        row.provider:
+            row
+        for row in rows
+    }
+
+    return {
+        "connectors": [
+
+            connector_view(
+                lookup.get(provider["id"]),
+                provider
+            )
+
+            for provider in PROVIDERS
+        ]
+    }
+
+
+@app.post(
+    "/workspaces/{workspace_id}/connectors/{provider_id}/connect"
+)
+def connect_provider(
+    workspace_id: int,
+    provider_id: str,
+    db: Session = Depends(get_db),
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    provider = provider_by_id(
+        provider_id
+    )
+
+    if not provider:
+
+        raise HTTPException(
+            404,
+            "Provider not found."
+        )
+
+    row = db.query(
+        Connector
+    ).filter(
+        Connector.workspace_id
+        == workspace_id,
+
+        Connector.provider
+        == provider_id
+    ).first()
+
     if not row:
+
         row = Connector(
-            workspace_id=wid,
-            provider=pid,
+            workspace_id=workspace_id,
+            provider=provider_id,
             name=provider["name"],
-            auth_type=provider["auth"],
             status="AVAILABLE",
-            enabled=True,
+            enabled=False,
+            auth_type=provider["auth"],
             config={},
         )
 
         db.add(row)
 
-    if provider["auth"] != "oauth":
+    if provider["auth"] == "api_key":
+
+        row.status = "CONFIGURE"
+        row.auth_type = "api_key"
+
         db.commit()
 
         return {
-            "ok": True,
-            "mode": "api_key",
-            "provider": provider,
+            "ok":
+                True,
+
+            "mode":
+                "api_key",
+
+            "provider":
+                provider,
         }
 
     try:
-        url, state = auth_url(pid)
 
-    except Exception as exc:
-        raise HTTPException(
-            400,
-            str(exc),
+        authorization_url, state = (
+            build_authorization_url(
+                provider_id
+            )
         )
 
-    config = dict(
-        row.config or {}
-    )
+    except ValueError as error:
 
-    config["oauth_state"] = state
+        raise HTTPException(
+            400,
+            str(error)
+        )
 
-    row.config = config
     row.status = "AUTHORIZING"
-    row.enabled = True
+    row.auth_type = "oauth"
+
+    row.config = {
+        **(row.config or {}),
+        "oauth_state": state,
+        "enabled": False,
+    }
 
     db.commit()
 
     return {
-        "ok": True,
-        "authorization_url": url,
+        "ok":
+            True,
+
+        "mode":
+            "oauth",
+
+        "authorization_url":
+            authorization_url,
     }
 
 
 @app.post(
-    "/workspaces/{wid}/connectors/{pid}/configure"
+    "/workspaces/{workspace_id}/connectors/{provider_id}/configure"
 )
-def connector_configure(
-    wid: int,
-    pid: str,
-    payload: dict,
+def configure_provider(
+    workspace_id: int,
+    provider_id: str,
+    payload: dict[str, Any],
     db: Session = Depends(get_db),
 ):
-    provider = provider_by_id(pid)
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    provider = provider_by_id(
+        provider_id
+    )
 
     if not provider:
+
         raise HTTPException(
             404,
-            "Provider not found",
+            "Provider not found."
         )
 
-    value = (
+    credential = str(
         payload.get("api_key")
-        or payload.get("key")
+        or payload.get("credential")
         or payload.get("token")
-    )
+        or ""
+    ).strip()
 
-    if not value:
+    if not credential:
+
         raise HTTPException(
-            422,
-            "Credential is required",
+            400,
+            "Credential is required."
         )
 
-    row = (
-        db.query(Connector)
-        .filter_by(
-            workspace_id=wid,
-            provider=pid,
-            name=provider["name"],
-        )
-        .first()
-    )
+    row = db.query(
+        Connector
+    ).filter(
+        Connector.workspace_id
+        == workspace_id,
+
+        Connector.provider
+        == provider_id
+    ).first()
 
     if not row:
+
         row = Connector(
-            workspace_id=wid,
-            provider=pid,
+            workspace_id=workspace_id,
+            provider=provider_id,
             name=provider["name"],
             auth_type=provider["auth"],
             config={},
@@ -1085,559 +1229,1207 @@ def connector_configure(
 
     row.status = "CONNECTED"
     row.enabled = True
-
-    config = dict(
-        row.config or {}
-    )
-
-    config["credential_set"] = True
-    config["secret"] = protect(
-        value
-    )
-
-    config["secret_ref"] = hashlib.sha256(
-        value.encode()
-    ).hexdigest()[:16]
-
-    row.config = config
     row.connected_at = now()
 
+    row.config = {
+        **(row.config or {}),
+        "credential":
+            encrypt_text(credential),
+
+        "credential_set":
+            True,
+
+        "enabled":
+            True,
+    }
+
+    log_activity(
+        db,
+        workspace_id,
+        "integration",
+        f"{provider['name']} connected",
+        "Credential stored server-side.",
+    )
+
+    notify(
+        db,
+        workspace_id,
+        f"{provider['name']} connected",
+        f"{provider['name']} is ready for SignalOS.",
+        "integration",
+    )
+
     db.commit()
 
-    activity(
-        db,
-        wid,
-        f'{provider["name"]} connected',
-        "API credential saved securely on the server",
-        "integration",
-    )
-
-    notification(
-        db,
-        wid,
-        f'{provider["name"]} connected',
-        "Integration is ready",
-        "integration",
-    )
-
     return {
-        "ok": True
+        "ok":
+            True,
+
+        "provider":
+            provider_id,
+
+        "status":
+            "CONNECTED",
     }
 
 
-@app.patch(
-    "/workspaces/{wid}/connectors/{pid}/toggle"
+# ============================================================
+# OAUTH CALLBACK
+# ============================================================
+
+@app.get(
+    "/oauth/callback/{provider_id}"
 )
-def connector_toggle(
-    wid: int,
-    pid: str,
-    payload: dict,
-    db: Session = Depends(get_db),
+def oauth_callback(
+    provider_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
 ):
-    row = (
-        db.query(Connector)
-        .filter_by(
-            workspace_id=wid,
-            provider=pid,
-        )
-        .first()
+
+    provider = provider_by_id(
+        provider_id
     )
 
-    if not row:
+    if not provider:
+
         raise HTTPException(
             404,
-            "Integration is not connected",
+            "Provider not found."
         )
-
-    row.enabled = bool(
-        payload.get(
-            "enabled"
-        )
-    )
-
-    db.commit()
-
-    return {
-        "ok": True,
-        "enabled": row.enabled,
-    }
-
-
-@app.delete(
-    "/workspaces/{wid}/connectors/{pid}"
-)
-def connector_delete(
-    wid: int,
-    pid: str,
-    db: Session = Depends(get_db),
-):
-    row = (
-        db.query(Connector)
-        .filter_by(
-            workspace_id=wid,
-            provider=pid,
-        )
-        .first()
-    )
-
-    if row:
-        db.delete(row)
-        db.commit()
-
-        activity(
-            db,
-            wid,
-            "Integration disconnected",
-            pid,
-            "integration",
-        )
-
-    return {
-        "ok": True
-    }
-
-
-@app.get("/oauth/callback/{pid}")
-def oauth_callback(
-    pid: str,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    code = request.query_params.get(
-        "code"
-    )
-
-    state = request.query_params.get(
-        "state"
-    )
 
     error = request.query_params.get(
         "error"
     )
 
-    rows = (
-        db.query(Connector)
-        .filter_by(
-            provider=pid,
-            status="AUTHORIZING",
+    if error:
+
+        return RedirectResponse(
+            f"{FRONTEND_URL}/?oauth_error={error}"
         )
-        .order_by(
-            Connector.id.desc()
-        )
-        .all()
+
+    state = request.query_params.get(
+        "state"
     )
 
-    row = None
+    code = request.query_params.get(
+        "code"
+    )
 
-    for connector in rows:
-        if (
-            connector.config or {}
-        ).get("oauth_state") == state:
-            row = connector
-            break
+    if not state or not code:
 
-    if not row and rows:
-        row = rows[0]
-
-    if error or not code or not row:
         return RedirectResponse(
-            f"{FRONTEND_URL}/?oauth=error&provider={pid}"
+            f"{FRONTEND_URL}/?oauth_error=missing_code_or_state"
+        )
+
+    rows = db.query(
+        Connector
+    ).filter(
+        Connector.provider
+        == provider_id
+    ).all()
+
+    row = next(
+        (
+            item
+            for item in rows
+            if (
+                item.config or {}
+            ).get("oauth_state")
+            == state
+        ),
+        None,
+    )
+
+    if not row:
+
+        return RedirectResponse(
+            f"{FRONTEND_URL}/?oauth_error=invalid_state"
         )
 
     try:
-        token_url = None
-        data = {}
 
-        if pid in (
-            "gmail",
-            "google_calendar",
-        ):
-            token_url = (
-                "https://oauth2.googleapis.com/token"
-            )
-
-            data = {
-                "code": code,
-                "client_id": os.environ[
-                    "GOOGLE_CLIENT_ID"
-                ],
-                "client_secret": os.environ[
-                    "GOOGLE_CLIENT_SECRET"
-                ],
-                "redirect_uri": (
-                    os.getenv(
-                        "GOOGLE_GMAIL_REDIRECT_URI"
-                    )
-                    if pid == "gmail"
-                    else os.getenv(
-                        "GOOGLE_CALENDAR_REDIRECT_URI"
-                    )
-                ),
-                "grant_type": "authorization_code",
-            }
-
-        elif pid in (
-            "microsoft365",
-            "outlook_calendar",
-        ):
-            token_url = (
-                "https://login.microsoftonline.com/"
-                "common/oauth2/v2.0/token"
-            )
-
-            data = {
-                "code": code,
-                "client_id": os.environ[
-                    "MICROSOFT_CLIENT_ID"
-                ],
-                "client_secret": os.environ[
-                    "MICROSOFT_CLIENT_SECRET"
-                ],
-                "redirect_uri": (
-                    os.getenv(
-                        "MICROSOFT_OUTLOOK_REDIRECT_URI"
-                    )
-                    if pid == "microsoft365"
-                    else os.getenv(
-                        "MICROSOFT_CALENDAR_REDIRECT_URI"
-                    )
-                ),
-                "grant_type": "authorization_code",
-            }
-
-        elif pid == "calendly":
-            token_url = (
-                "https://auth.calendly.com/oauth/token"
-            )
-
-            data = {
-                "code": code,
-                "client_id": os.environ[
-                    "CALENDLY_CLIENT_ID"
-                ],
-                "client_secret": os.environ[
-                    "CALENDLY_CLIENT_SECRET"
-                ],
-                "redirect_uri": os.environ[
-                    "CALENDLY_REDIRECT_URI"
-                ],
-                "grant_type": "authorization_code",
-            }
-
-        elif pid == "hubspot":
-            token_url = (
-                "https://api.hubapi.com/oauth/v1/token"
-            )
-
-            data = {
-                "code": code,
-                "client_id": os.environ[
-                    "HUBSPOT_CLIENT_ID"
-                ],
-                "client_secret": os.environ[
-                    "HUBSPOT_CLIENT_SECRET"
-                ],
-                "redirect_uri": os.environ[
-                    "HUBSPOT_REDIRECT_URI"
-                ],
-                "grant_type": "authorization_code",
-            }
-
-        else:
-            raise ValueError(
-                "OAuth callback is not enabled "
-                "for this provider yet."
-            )
-
-        body = urllib.parse.urlencode(
-            data
-        ).encode()
-
-        request_obj = urllib.request.Request(
-            token_url,
-            body=body,
-            headers={
-                "Content-Type":
-                    "application/x-www-form-urlencoded"
-            },
-            method="POST",
+        tokens = token_exchange(
+            provider_id,
+            code
         )
 
-        with urllib.request.urlopen(
-            request_obj,
-            timeout=20,
-        ) as response:
-            token = json.loads(
-                response.read().decode()
-            )
+    except Exception as error:
 
-        config = dict(
-            row.config or {}
-        )
-
-        config.pop(
-            "oauth_state",
-            None,
-        )
-
-        config["oauth_token"] = protect(
-            json.dumps(token)
-        )
-
-        config["oauth_token_type"] = "encrypted"
-
-        row.config = config
-        row.status = "CONNECTED"
-        row.enabled = True
-        row.connected_at = now()
-
-        db.commit()
-
-        activity(
-            db,
-            row.workspace_id,
-            f"{row.name} connected",
-            "OAuth authorization completed",
-            "integration",
-        )
-
-        notification(
-            db,
-            row.workspace_id,
-            f"{row.name} connected",
-            "OAuth authorization completed",
-            "integration",
-        )
-
-        return RedirectResponse(
-            f"{FRONTEND_URL}/?oauth=connected&provider={pid}"
-        )
-
-    except Exception as exc:
-        config = dict(
-            row.config or {}
-        )
-
-        config["last_error"] = str(exc)
-
-        row.config = config
         row.status = "ERROR"
 
+        row.config = {
+            **(row.config or {}),
+            "last_error":
+                str(error),
+        }
+
         db.commit()
 
         return RedirectResponse(
-            f"{FRONTEND_URL}/?oauth=error&provider={pid}"
+            f"{FRONTEND_URL}/?oauth_error=token_exchange_failed"
         )
 
+    safe_keys = [
+        "access_token",
+        "refresh_token",
+        "expires_in",
+        "token_type",
+        "scope",
+    ]
 
-@app.get("/workspaces/{wid}/conversations")
-def conversations(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    rows = (
-        db.query(Activity)
-        .filter_by(
-            workspace_id=wid,
-            kind="conversation",
+    safe_tokens = {
+        key:
+            tokens[key]
+
+        for key in safe_keys
+
+        if key in tokens
+    }
+
+    if "access_token" not in safe_tokens:
+
+        row.status = "ERROR"
+
+        row.config = {
+            **(row.config or {}),
+            "last_error":
+                "Provider did not return an access token.",
+        }
+
+        db.commit()
+
+        return RedirectResponse(
+            f"{FRONTEND_URL}/?oauth_error=no_access_token"
         )
-        .order_by(
-            Activity.created_at.desc()
-        )
-        .all()
+
+    row.status = "CONNECTED"
+    row.enabled = True
+    row.connected_at = now()
+
+    row.config = {
+
+        "oauth": {
+            key:
+                encrypt_text(
+                    str(value)
+                )
+
+            for key, value
+            in safe_tokens.items()
+        },
+
+        "credential_set":
+            True,
+
+        "enabled":
+            True,
+    }
+
+    log_activity(
+        db,
+        row.workspace_id,
+        "integration",
+        f"{provider['name']} connected",
+        "OAuth authorization completed.",
     )
 
+    notify(
+        db,
+        row.workspace_id,
+        f"{provider['name']} connected",
+        f"{provider['name']} is ready for SignalOS.",
+        "integration",
+    )
+
+    db.commit()
+
+    return RedirectResponse(
+        f"{FRONTEND_URL}/?oauth_success={provider_id}"
+    )
+
+
+@app.patch(
+    "/workspaces/{workspace_id}/connectors/{provider_id}/toggle"
+)
+def toggle_provider(
+    workspace_id: int,
+    provider_id: str,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    row = db.query(
+        Connector
+    ).filter(
+        Connector.workspace_id
+        == workspace_id,
+
+        Connector.provider
+        == provider_id
+    ).first()
+
+    if not row:
+
+        raise HTTPException(
+            404,
+            "Integration has not been connected."
+        )
+
+    if row.status != "CONNECTED":
+
+        raise HTTPException(
+            400,
+            "Connect this provider before enabling it."
+        )
+
+    row.enabled = bool(
+        payload.get(
+            "enabled",
+            True
+        )
+    )
+
+    row.config = {
+        **(row.config or {}),
+        "enabled":
+            row.enabled,
+    }
+
+    log_activity(
+        db,
+        workspace_id,
+        "integration",
+        (
+            f"{row.name} "
+            f"{'enabled' if row.enabled else 'disabled'}"
+        ),
+    )
+
+    db.commit()
+
     return {
-        "conversations": [
-            ser(row)
-            for row in rows
+        "ok":
+            True,
+
+        "enabled":
+            row.enabled,
+    }
+
+
+@app.delete(
+    "/workspaces/{workspace_id}/connectors/{provider_id}"
+)
+def disconnect_provider(
+    workspace_id: int,
+    provider_id: str,
+    db: Session = Depends(get_db),
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    row = db.query(
+        Connector
+    ).filter(
+        Connector.workspace_id
+        == workspace_id,
+
+        Connector.provider
+        == provider_id
+    ).first()
+
+    if row:
+
+        name = (
+            row.name
+            or provider_id
+        )
+
+        db.delete(row)
+
+        log_activity(
+            db,
+            workspace_id,
+            "integration",
+            f"{name} disconnected",
+        )
+
+        notify(
+            db,
+            workspace_id,
+            f"{name} disconnected",
+            "Automations using this provider may need to be reviewed.",
+            "integration",
+        )
+
+        db.commit()
+
+    return {
+        "ok":
+            True
+    }
+
+
+# ============================================================
+# CAMPAIGNS
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/campaigns"
+)
+def list_campaigns(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    campaigns = db.query(
+        Campaign
+    ).filter_by(
+        workspace_id=workspace_id
+    ).order_by(
+        Campaign.id.desc()
+    ).all()
+
+    return {
+        "campaigns": [
+            serialize(campaign)
+            for campaign in campaigns
         ]
     }
 
 
-@app.get("/workspaces/{wid}/meetings")
-def meetings(
-    wid: int,
+@app.post(
+    "/workspaces/{workspace_id}/campaigns"
+)
+def create_campaign(
+    workspace_id: int,
+    payload: dict[str, Any],
     db: Session = Depends(get_db),
 ):
-    rows = (
-        db.query(Activity)
-        .filter_by(
-            workspace_id=wid,
-            kind="meeting",
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    name = str(
+        payload.get(
+            "name",
+            ""
         )
-        .order_by(
-            Activity.created_at.desc()
+    ).strip()
+
+    if not name:
+
+        raise HTTPException(
+            400,
+            "Campaign name is required."
         )
-        .all()
+
+    campaign = Campaign(
+        workspace_id=workspace_id,
+        name=name,
+        status="DRAFT",
     )
 
-    return {
-        "meetings": [
-            ser(row)
-            for row in rows
-        ]
-    }
-
-
-@app.get("/workspaces/{wid}/signals")
-def signals(
-    wid: int,
-    db: Session = Depends(get_db),
-):
-    workspace = ensure_workspace(
-        db,
-        wid,
-    )
-
-    return {
-        "signals": (
-            workspace.settings or {}
-        ).get(
-            "intent_signals",
-            [],
-        )
-    }
-
-
-@app.put("/workspaces/{wid}/signals")
-def signals_put(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    workspace = ensure_workspace(
-        db,
-        wid,
-    )
-
-    settings = dict(
-        workspace.settings or {}
-    )
-
-    settings["intent_signals"] = payload.get(
+    fields = [
+        "countries",
+        "industries",
+        "decision_makers",
         "signals",
-        [],
+        "channel",
+        "booking_link",
+        "daily_limit",
+    ]
+
+    for field in fields:
+
+        if field in payload:
+
+            setattr(
+                campaign,
+                field,
+                payload[field]
+            )
+
+    db.add(campaign)
+
+    log_activity(
+        db,
+        workspace_id,
+        "campaign",
+        f"Campaign created: {name}",
+        "Campaign saved as draft.",
     )
+
+    notify(
+        db,
+        workspace_id,
+        "Campaign created",
+        f"{name} is ready for review.",
+        "campaign",
+    )
+
+    db.commit()
+    db.refresh(campaign)
+
+    return {
+        "campaign":
+            serialize(campaign)
+    }
+
+
+@app.get(
+    "/workspaces/{workspace_id}/campaigns/{campaign_id}"
+)
+def get_campaign(
+    workspace_id: int,
+    campaign_id: int,
+    db: Session = Depends(get_db),
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    campaign = db.query(
+        Campaign
+    ).filter(
+        Campaign.id
+        == campaign_id,
+
+        Campaign.workspace_id
+        == workspace_id
+    ).first()
+
+    if not campaign:
+
+        raise HTTPException(
+            404,
+            "Campaign not found."
+        )
+
+    return {
+        "campaign":
+            serialize(campaign)
+    }
+
+
+@app.patch(
+    "/workspaces/{workspace_id}/campaigns/{campaign_id}"
+)
+def update_campaign(
+    workspace_id: int,
+    campaign_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    campaign = db.query(
+        Campaign
+    ).filter(
+        Campaign.id
+        == campaign_id,
+
+        Campaign.workspace_id
+        == workspace_id
+    ).first()
+
+    if not campaign:
+
+        raise HTTPException(
+            404,
+            "Campaign not found."
+        )
+
+    requested_status = payload.get(
+        "status"
+    )
+
+    if requested_status == "ACTIVE":
+
+        settings = settings_dict(
+            workspace
+        )
+
+        if not settings.get(
+            "automation_enabled"
+        ):
+
+            raise HTTPException(
+                400,
+                "Enable Master automation before activating a campaign."
+            )
+
+        email_connected = db.query(
+            Connector
+        ).filter(
+            Connector.workspace_id
+            == workspace_id,
+
+            Connector.status
+            == "CONNECTED",
+
+            Connector.enabled
+            == True,
+
+            Connector.provider.in_([
+                "gmail",
+                "microsoft365",
+                "resend",
+                "sendgrid",
+                "mailgun",
+            ])
+        ).count() > 0
+
+        if not email_connected:
+
+            raise HTTPException(
+                400,
+                "Connect and enable an email provider before activating a campaign."
+            )
+
+        llm_connected = db.query(
+            Connector
+        ).filter(
+            Connector.workspace_id
+            == workspace_id,
+
+            Connector.status
+            == "CONNECTED",
+
+            Connector.enabled
+            == True,
+
+            Connector.provider.in_([
+                "openai",
+                "anthropic",
+                "gemini",
+                "openrouter",
+            ])
+        ).count() > 0
+
+        if not llm_connected:
+
+            raise HTTPException(
+                400,
+                "Connect and enable an AI / LLM provider before activating a campaign."
+            )
+
+    if requested_status in {
+        "DRAFT",
+        "ACTIVE",
+        "PAUSED",
+        "COMPLETED",
+    }:
+
+        campaign.status = requested_status
+
+    fields = [
+        "name",
+        "countries",
+        "industries",
+        "decision_makers",
+        "signals",
+        "channel",
+        "booking_link",
+        "daily_limit",
+    ]
+
+    for field in fields:
+
+        if field in payload:
+
+            setattr(
+                campaign,
+                field,
+                payload[field]
+            )
+
+    db.commit()
+    db.refresh(campaign)
+
+    log_activity(
+        db,
+        workspace_id,
+        "campaign",
+        (
+            f"Campaign "
+            f"{campaign.status.lower()}: "
+            f"{campaign.name}"
+        ),
+    )
+
+    db.commit()
+
+    return {
+        "campaign":
+            serialize(campaign)
+    }
+
+
+# ============================================================
+# PROSPECTS
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/prospects"
+)
+def list_prospects(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    rows = db.query(
+        Prospect
+    ).filter_by(
+        workspace_id=workspace_id
+    ).order_by(
+        Prospect.id.desc()
+    ).all()
+
+    return {
+        "prospects": [
+            serialize(row)
+            for row in rows
+        ]
+    }
+
+
+@app.post(
+    "/workspaces/{workspace_id}/prospects"
+)
+def create_prospect(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    name = str(
+        payload.get(
+            "name",
+            ""
+        )
+    ).strip()
+
+    if not name:
+
+        raise HTTPException(
+            400,
+            "Prospect name is required."
+        )
+
+    prospect = Prospect(
+        workspace_id=workspace_id,
+        name=name,
+    )
+
+    for field in [
+        "email",
+        "title",
+        "country",
+        "score",
+        "status",
+        "intent",
+        "evidence",
+        "source",
+    ]:
+
+        if field in payload:
+
+            setattr(
+                prospect,
+                field,
+                payload[field]
+            )
+
+    db.add(prospect)
+
+    log_activity(
+        db,
+        workspace_id,
+        "prospect",
+        f"Prospect added: {name}",
+    )
+
+    db.commit()
+    db.refresh(prospect)
+
+    return {
+        "prospect":
+            serialize(prospect)
+    }
+
+
+# ============================================================
+# COMPANIES
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/companies"
+)
+def list_companies(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    rows = db.query(
+        Company
+    ).filter_by(
+        workspace_id=workspace_id
+    ).order_by(
+        Company.id.desc()
+    ).all()
+
+    return {
+        "companies": [
+            serialize(row)
+            for row in rows
+        ]
+    }
+
+
+@app.post(
+    "/workspaces/{workspace_id}/companies"
+)
+def create_company(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    name = str(
+        payload.get(
+            "name",
+            ""
+        )
+    ).strip()
+
+    if not name:
+
+        raise HTTPException(
+            400,
+            "Company name is required."
+        )
+
+    company = Company(
+        workspace_id=workspace_id,
+        name=name,
+    )
+
+    for field in [
+        "domain",
+        "industry",
+        "country",
+        "size",
+        "website",
+    ]:
+
+        if field in payload:
+
+            setattr(
+                company,
+                field,
+                payload[field]
+            )
+
+    db.add(company)
+
+    log_activity(
+        db,
+        workspace_id,
+        "company",
+        f"Company added: {name}",
+    )
+
+    db.commit()
+    db.refresh(company)
+
+    return {
+        "company":
+            serialize(company)
+    }
+
+
+# ============================================================
+# INTENT SIGNALS
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/signals"
+)
+def get_signals(
+    workspace_id: int,
+    db: Session = Depends(get_db)
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    return {
+        "signals":
+            settings_dict(
+                workspace
+            ).get(
+                "signals",
+                []
+            )
+    }
+
+
+@app.put(
+    "/workspaces/{workspace_id}/signals"
+)
+def save_signals(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+):
+
+    workspace = require_onboarded(
+        workspace_id,
+        db
+    )
+
+    settings = settings_dict(
+        workspace
+    )
+
+    settings["signals"] = [
+        str(value).strip()
+
+        for value
+        in payload.get(
+            "signals",
+            []
+        )
+
+        if str(value).strip()
+    ]
 
     workspace.settings = settings
 
     db.commit()
 
-    activity(
-        db,
-        wid,
-        "Intent signals updated",
-    )
-
     return {
-        "signals": settings[
-            "intent_signals"
-        ]
+        "ok":
+            True,
+
+        "signals":
+            settings["signals"]
     }
 
 
-@app.get("/workspaces/{wid}/suppression")
-def suppression(
-    wid: int,
-    db: Session = Depends(get_db),
+# ============================================================
+# ACTIVITY
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/activity"
+)
+def get_activity(
+    workspace_id: int,
+    db: Session = Depends(get_db)
 ):
-    rows = (
-        db.query(Suppression)
-        .filter_by(
-            workspace_id=wid
-        )
-        .order_by(
-            Suppression.created_at.desc()
-        )
-        .all()
+
+    require_onboarded(
+        workspace_id,
+        db
     )
 
+    rows = db.query(
+        Activity
+    ).filter_by(
+        workspace_id=workspace_id
+    ).order_by(
+        Activity.id.desc()
+    ).limit(100).all()
+
     return {
-        "items": [
-            ser(row)
+        "activity": [
+            serialize(row)
             for row in rows
         ]
     }
 
 
-@app.post("/workspaces/{wid}/suppression")
-def suppression_add(
-    wid: int,
-    payload: dict,
-    db: Session = Depends(get_db),
+# ============================================================
+# NOTIFICATIONS
+# ============================================================
+
+@app.get(
+    "/workspaces/{workspace_id}/notifications"
+)
+def get_notifications(
+    workspace_id: int,
+    db: Session = Depends(get_db)
 ):
-    suppression = Suppression(
-        workspace_id=wid,
-        value=payload.get(
-            "value",
-            "",
-        ),
-        reason=payload.get(
-            "reason",
-            "",
-        ),
+
+    require_onboarded(
+        workspace_id,
+        db
     )
 
-    db.add(suppression)
+    rows = db.query(
+        Notification
+    ).filter_by(
+        workspace_id=workspace_id
+    ).order_by(
+        Notification.id.desc()
+    ).limit(100).all()
+
+    return {
+        "notifications": [
+            serialize(row)
+            for row in rows
+        ]
+    }
+
+
+@app.post(
+    "/workspaces/{workspace_id}/notifications/read"
+)
+def mark_notifications_read(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db)
+):
+
+    require_onboarded(
+        workspace_id,
+        db
+    )
+
+    ids = set(
+        payload.get(
+            "ids",
+            []
+        )
+    )
+
+    rows = db.query(
+        Notification
+    ).filter(
+        Notification.workspace_id
+        == workspace_id
+    ).all()
+
+    for notification in rows:
+
+        if (
+            not ids
+            or notification.id in ids
+        ):
+
+            notification.read = True
+
     db.commit()
 
-    return ser(suppression)
+    return {
+        "ok":
+            True
+    }
 
 
-@app.post("/workspaces/{wid}/seed-demo")
-def seed_demo(
-    wid: int,
-    db: Session = Depends(get_db),
+# ============================================================
+# WORKSPACE CREATION
+# ============================================================
+
+@app.post(
+    "/workspaces"
+)
+def create_workspace(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db)
 ):
-    ensure_workspace(
-        db,
-        wid,
-    )
 
-    if (
-        db.query(Company)
-        .filter_by(workspace_id=wid)
-        .count()
-        == 0
-    ):
-        company = Company(
-            workspace_id=wid,
-            name="Example SaaS",
-            domain="example.com",
-            industry="SaaS",
-            country="India",
-            size="11-50",
-        )
+    workspace = Workspace(
 
-        db.add(company)
-        db.flush()
-
-        db.add(
-            Prospect(
-                workspace_id=wid,
-                company_id=company.id,
-                name="Aarav Mehta",
-                email="aarav@example.com",
-                title="Founder",
-                country="India",
-                score=82,
-                status="QUALIFIED",
-                intent="Hiring + expansion",
-                evidence="Example signal record",
+        name=
+            payload.get(
+                "name"
             )
-        )
+            or "SignalOS Workspace",
+
+        owner_name=
+            payload.get(
+                "owner_name"
+            )
+            or "",
+
+        owner_email=
+            payload.get(
+                "owner_email"
+            )
+            or "",
+
+        settings={
+            "onboarding_completed":
+                False,
+
+            "ai_mode":
+                "copilot",
+
+            "automation_enabled":
+                False,
+
+            "timezone":
+                "Asia/Kolkata",
+
+            "llm_provider":
+                "",
+
+            "llm_model":
+                "",
+
+            "signals":
+                [],
+        },
+    )
+
+    db.add(workspace)
 
     db.commit()
+    db.refresh(workspace)
 
-    activity(
-        db,
-        wid,
-        "Demo workspace seeded",
-        "Sample data was added intentionally.",
-        "system",
+    return {
+        "workspace":
+            serialize(workspace)
+    }
+
+
+# ============================================================
+# JOBS
+# ============================================================
+
+@app.post(
+    "/workspaces/{workspace_id}/jobs"
+)
+def create_job(
+    workspace_id: int,
+    payload: dict[str, Any],
+    db: Session = Depends(get_db)
+):
+
+    require_onboarded(
+        workspace_id,
+        db
     )
 
     return {
-        "ok": True
+        "ok":
+            True,
+
+        "status":
+            "QUEUED",
+
+        "job":
+            payload,
+    }
+
+
+# ============================================================
+# OPERATING MODEL
+# ============================================================
+
+@app.get(
+    "/docs/operating-model"
+)
+def operating_model():
+
+    return {
+
+        "core_loop":
+            (
+                "Find reason to buy -> "
+                "prove why now -> "
+                "contact -> "
+                "qualify -> "
+                "book -> "
+                "stop"
+            ),
+
+        "modes": [
+            "manual",
+            "copilot",
+            "autopilot",
+        ],
+    }
+
+
+# ============================================================
+# WEBHOOKS
+# ============================================================
+
+@app.post(
+    "/webhooks/email"
+)
+def email_webhook(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db)
+):
+
+    return {
+        "ok":
+            True,
+
+        "received":
+            True,
+    }
+
+
+@app.post(
+    "/webhooks/calendar"
+)
+def calendar_webhook(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db)
+):
+
+    return {
+        "ok":
+            True,
+
+        "received":
+            True,
     }
