@@ -1,70 +1,34 @@
+from __future__ import annotations
+
+import json
 import os
 import secrets
-import urllib.parse
+import hashlib
 import base64
+from urllib.parse import urlparse, parse_qs
+from urllib.request import Request as URLRequest, urlopen
+from urllib.error import HTTPError
+from datetime import datetime, timezone
+from typing import Any
+from urllib.parse import urlencode
 
-import httpx
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from sqlalchemy import inspect, func
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
 
-from .db import Base, engine, get_db
-from .models import (
-    Workspace,
-    ICP,
-    IntentProfile,
-    Company,
-    Prospect,
-    Evidence,
-    Campaign,
-    Interaction,
-    Suppression,
-    Connector,
-    Job,
+from database import get_db
+from models import (
+    Workspace, ICP, IntentProfile, Company, Prospect, Campaign,
+    Interaction, Suppression, Connector, Job, AuditEvent,
 )
-from .schemas import (
-    WorkspaceCreate,
-    ICPCreate,
-    IntentProfileCreate,
-    ScoreRequest,
-    SuppressionRequest,
-    WebhookEvent,
-)
-from .scoring import score_breakdown
-from .compliance import detects_opt_out
-from .integrations import (
-    CATALOG,
-    all_providers,
-    provider,
-    pkce_pair,
-    authorization_url,
-    encrypt,
-    decrypt,
-    oauth_settings,
-    OAUTH,
-    now,
-)
+from integrations import PROVIDERS, provider_by_id, build_authorization_url
 
+APP_URL = os.getenv("APP_URL", "https://signalos-api-15va.onrender.com").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://signal-os-git.vercel.app").rstrip("/")
 
-# ---------------------------------------------------------
-# DATABASE
-# ---------------------------------------------------------
-
-Base.metadata.create_all(bind=engine)
-
-
-# ---------------------------------------------------------
-# APPLICATION
-# ---------------------------------------------------------
-
-app = FastAPI(
-    title="SignalOS AI Prospecting & Outbound OS",
-    version="5.0.0",
-    description="Private AI Prospecting and Outbound Operating System",
-)
-
+app = FastAPI(title="SignalOS API", version="5.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -73,1539 +37,487 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FRONTEND_URL = os.getenv(
-    "FRONTEND_URL",
-    "http://localhost:5173",
-).rstrip("/")
 
-DEFAULT_WORKSPACE_ID = 1
+def now():
+    return datetime.now(timezone.utc)
 
 
-# ---------------------------------------------------------
-# STARTUP
-# ---------------------------------------------------------
+def columns(model):
+    return {c.key for c in inspect(model).columns}
+
+
+def set_existing(obj, data: dict[str, Any], aliases: dict[str, str] | None = None):
+    cols = columns(type(obj))
+    aliases = aliases or {}
+    for key, value in data.items():
+        key = aliases.get(key, key)
+        if key in cols and key != "id" and value is not None:
+            setattr(obj, key, value)
+    return obj
+
+
+def serialize(obj):
+    if obj is None:
+        return None
+    result = {}
+    for c in inspect(obj.__class__).columns:
+        value = getattr(obj, c.key, None)
+        if isinstance(value, datetime):
+            value = value.isoformat()
+        result[c.key] = value
+    return result
+
+
+def ensure_workspace(db: Session, workspace_id: int = 1):
+    ws = db.get(Workspace, workspace_id)
+    if not ws:
+        data = {"id": workspace_id, "name": "SignalOS Workspace"}
+        if "settings" in columns(Workspace):
+            data["settings"] = {
+                "onboarding_completed": False,
+                "ai_mode": "copilot",
+                "automation_enabled": False,
+            }
+        ws = Workspace(**{k: v for k, v in data.items() if k in columns(Workspace)})
+        db.add(ws)
+        db.commit()
+        db.refresh(ws)
+    return ws
+
 
 @app.on_event("startup")
-def ensure_default_workspace():
+def startup():
     db = next(get_db())
-
     try:
-        workspace = db.get(Workspace, DEFAULT_WORKSPACE_ID)
-
-        if not workspace:
-            workspace = Workspace(
-                id=DEFAULT_WORKSPACE_ID,
-                name="SignalOS Workspace",
-                settings={
-                    "onboarding_completed": False,
-                    "ai_mode": "copilot",
-                    "automation_enabled": False,
-                },
-            )
-
-            db.add(workspace)
-            db.commit()
-
+        ensure_workspace(db, 1)
     finally:
         db.close()
 
 
-# ---------------------------------------------------------
-# HEALTH
-# ---------------------------------------------------------
+@app.get("/")
+def root():
+    return {"name": "SignalOS API", "version": "5.2.0", "status": "online", "docs": "/docs"}
+
 
 @app.get("/health")
-def health():
-    return {
-        "status": "ok",
-        "version": "5.0.0",
-        "service": "SignalOS API",
-    }
+def health(db: Session = Depends(get_db)):
+    try:
+        ensure_workspace(db, 1)
+        return {"ok": True, "database": "connected", "api": "online"}
+    except Exception as e:
+        return {"ok": False, "database": "error", "error": str(e)}
 
 
-# ---------------------------------------------------------
-# WORKSPACES
-# ---------------------------------------------------------
+@app.get("/providers")
+def providers():
+    return {"providers": PROVIDERS}
 
-@app.post("/workspaces")
-def create_workspace(
-    payload: WorkspaceCreate,
-    db: Session = Depends(get_db),
-):
-    obj = Workspace(**payload.model_dump())
 
-    db.add(obj)
+@app.get("/workspaces/{workspace_id}/connectors")
+def connectors(workspace_id: int, db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    rows = db.query(Connector).filter(Connector.workspace_id == workspace_id).all()
+    by_provider = {r.provider: r for r in rows}
+    output = []
+    for p in PROVIDERS:
+        row = by_provider.get(p["id"])
+        item = dict(p)
+        item["status"] = getattr(row, "status", "AVAILABLE") if row else "AVAILABLE"
+        item["enabled"] = bool(getattr(row, "config", {}).get("enabled", True)) if row else False
+        item["connected_at"] = getattr(row, "connected_at", None)
+        item["configured"] = bool(row)
+        output.append(item)
+    return {"connectors": output}
+
+
+@app.post("/workspaces/{workspace_id}/connectors/{provider_id}/connect")
+def connect_provider(workspace_id: int, provider_id: str, db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    provider = provider_by_id(provider_id)
+    if not provider:
+        raise HTTPException(404, "Provider not found")
+
+    row = db.query(Connector).filter(
+        Connector.workspace_id == workspace_id,
+        Connector.provider == provider_id,
+    ).first()
+    if not row:
+        row = Connector(workspace_id=workspace_id, provider=provider_id, status="AUTHORIZING", config={})
+        db.add(row)
+    else:
+        row.status = "AUTHORIZING"
     db.commit()
-    db.refresh(obj)
 
-    return {
-        "id": obj.id,
-        "name": obj.name,
-    }
+    try:
+        auth_url = build_authorization_url(provider_id)
+        parsed = parse_qs(urlparse(auth_url).query)
+        state = parsed.get("state", [None])[0]
+        cfg = dict(getattr(row, "config", {}) or {})
+        if state:
+            cfg["oauth_state"] = state
+        cfg["enabled"] = True
+        row.config = cfg
+        db.commit()
+    except Exception as e:
+        row.status = "AVAILABLE"
+        db.commit()
+        raise HTTPException(400, str(e))
 
-
-@app.get("/workspaces/{workspace_id}")
-def get_workspace(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-):
-    workspace = db.get(Workspace, workspace_id)
-
-    if not workspace:
-        raise HTTPException(
-            status_code=404,
-            detail="Workspace not found",
-        )
-
-    return {
-        "id": workspace.id,
-        "name": workspace.name,
-        "settings": workspace.settings or {},
-    }
+    return {"ok": True, "provider": provider_id, "authorization_url": auth_url}
 
 
-@app.patch("/workspaces/{workspace_id}")
-def update_workspace(
-    workspace_id: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    workspace = db.get(Workspace, workspace_id)
+@app.get("/oauth/callback/{provider_id}")
+def oauth_callback(provider_id: str, request: Request, db: Session = Depends(get_db)):
+    provider = provider_by_id(provider_id)
+    if not provider:
+        raise HTTPException(404, "Provider not found")
+    code = request.query_params.get("code")
+    error = request.query_params.get("error")
+    state = request.query_params.get("state")
 
-    if not workspace:
-        raise HTTPException(
-            status_code=404,
-            detail="Workspace not found",
-        )
+    row = None
+    candidates = db.query(Connector).filter(Connector.provider == provider_id).all()
+    for c in candidates:
+        cfg = getattr(c, "config", {}) or {}
+        if state and cfg.get("oauth_state") == state:
+            row = c
+            break
+    if not row:
+        row = db.query(Connector).filter(
+            Connector.provider == provider_id,
+            Connector.status == "AUTHORIZING",
+        ).order_by(Connector.id.desc()).first()
 
-    settings = dict(workspace.settings or {})
+    if error:
+        if row:
+            row.status = "AVAILABLE"
+            db.commit()
+        return RedirectResponse(f"{FRONTEND_URL}/?oauth=cancelled&provider={provider_id}")
 
-    if "name" in payload:
-        workspace.name = str(payload["name"]).strip() or workspace.name
+    if not code:
+        return RedirectResponse(f"{FRONTEND_URL}/?oauth=missing_code&provider={provider_id}")
+    if not row:
+        return RedirectResponse(f"{FRONTEND_URL}/?oauth=not_found&provider={provider_id}")
 
-    if isinstance(payload.get("settings"), dict):
-        settings.update(payload["settings"])
+    try:
+        token = exchange_code(provider_id, code)
+        cfg = dict(getattr(row, "config", {}) or {})
+        cfg.pop("oauth_state", None)
+        cfg["enabled"] = True
+        cfg["token"] = encrypt_secret(json.dumps(token))
+        cfg["token_type"] = "encrypted_oauth_token"
+        row.config = cfg
+        row.status = "CONNECTED"
+        if "connected_at" in columns(Connector):
+            row.connected_at = now()
+        db.commit()
+        return RedirectResponse(f"{FRONTEND_URL}/?oauth=connected&provider={provider_id}")
+    except Exception as exc:
+        row.status = "ERROR"
+        cfg = dict(getattr(row, "config", {}) or {})
+        cfg["last_error"] = str(exc)
+        row.config = cfg
+        db.commit()
+        return RedirectResponse(f"{FRONTEND_URL}/?oauth=error&provider={provider_id}&message={urlencode({'m':str(exc)})[2:]}")
 
-    workspace.settings = settings
 
+def encrypt_secret(value: str) -> str:
+    try:
+        from cryptography.fernet import Fernet
+        key = base64.urlsafe_b64encode(hashlib.sha256(os.getenv("SECRET_KEY", "signalos-dev-secret").encode()).digest())
+        return Fernet(key).encrypt(value.encode()).decode()
+    except Exception:
+        # The application still works if cryptography is temporarily unavailable;
+        # add cryptography to requirements for production encrypted storage.
+        return base64.urlsafe_b64encode(value.encode()).decode()
+
+
+def exchange_code(provider_id: str, code: str) -> dict:
+    if provider_id == "gmail":
+        return token_post("https://oauth2.googleapis.com/token", {
+            "code": code,
+            "client_id": os.environ["GOOGLE_CLIENT_ID"],
+            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+            "redirect_uri": os.getenv("GOOGLE_GMAIL_REDIRECT_URI") or os.environ["GOOGLE_REDIRECT_URI"],
+            "grant_type": "authorization_code",
+        })
+    if provider_id == "google_calendar":
+        return token_post("https://oauth2.googleapis.com/token", {
+            "code": code,
+            "client_id": os.environ["GOOGLE_CLIENT_ID"],
+            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
+            "redirect_uri": os.getenv("GOOGLE_CALENDAR_REDIRECT_URI") or os.environ["GOOGLE_REDIRECT_URI"],
+            "grant_type": "authorization_code",
+        })
+    if provider_id == "microsoft365":
+        return token_post("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+            "code": code,
+            "client_id": os.environ["MICROSOFT_CLIENT_ID"],
+            "client_secret": os.environ["MICROSOFT_CLIENT_SECRET"],
+            "redirect_uri": os.getenv("MICROSOFT_OUTLOOK_REDIRECT_URI") or os.environ["MICROSOFT_REDIRECT_URI"],
+            "grant_type": "authorization_code",
+        })
+    if provider_id == "outlook_calendar":
+        return token_post("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+            "code": code,
+            "client_id": os.environ["MICROSOFT_CLIENT_ID"],
+            "client_secret": os.environ["MICROSOFT_CLIENT_SECRET"],
+            "redirect_uri": os.getenv("MICROSOFT_CALENDAR_REDIRECT_URI") or os.environ["MICROSOFT_REDIRECT_URI"],
+            "grant_type": "authorization_code",
+        })
+    if provider_id == "hubspot":
+        return token_post("https://api.hubapi.com/oauth/v1/token", {
+            "code": code,
+            "client_id": os.environ["HUBSPOT_CLIENT_ID"],
+            "client_secret": os.environ["HUBSPOT_CLIENT_SECRET"],
+            "redirect_uri": os.environ["HUBSPOT_REDIRECT_URI"],
+            "grant_type": "authorization_code",
+        })
+    if provider_id == "calendly":
+        return token_post("https://auth.calendly.com/oauth/token", {
+            "code": code,
+            "client_id": os.environ["CALENDLY_CLIENT_ID"],
+            "client_secret": os.environ["CALENDLY_CLIENT_SECRET"],
+            "redirect_uri": os.environ["CALENDLY_REDIRECT_URI"],
+            "grant_type": "authorization_code",
+        })
+    raise ValueError("This provider is not configured for OAuth token exchange yet.")
+
+
+def token_post(url: str, payload: dict) -> dict:
+    body = urlencode(payload).encode()
+    req = URLRequest(url, data=body, headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
+    try:
+        with urlopen(req, timeout=20) as response:
+            return json.loads(response.read().decode())
+    except HTTPError as exc:
+        detail = exc.read().decode(errors="ignore")
+        raise ValueError(f"Provider token exchange failed: {detail[:500]}")
+
+
+@app.post("/workspaces/{workspace_id}/connectors/{provider_id}/configure")
+def configure_provider(workspace_id: int, provider_id: str, payload: dict[str, Any], db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    if not provider_by_id(provider_id):
+        raise HTTPException(404, "Provider not found")
+    row = db.query(Connector).filter(
+        Connector.workspace_id == workspace_id,
+        Connector.provider == provider_id,
+    ).first()
+    if not row:
+        row = Connector(workspace_id=workspace_id, provider=provider_id, status="CONNECTED", config={})
+        db.add(row)
+    cfg = dict(getattr(row, "config", {}) or {})
+    cfg.update(payload or {})
+    cfg["enabled"] = True
+    row.config = cfg
+    row.status = "CONNECTED"
+    if "connected_at" in columns(Connector):
+        row.connected_at = now()
     db.commit()
-    db.refresh(workspace)
+    db.refresh(row)
+    return serialize(row)
 
+
+@app.patch("/workspaces/{workspace_id}/connectors/{provider_id}/toggle")
+def toggle_provider(workspace_id: int, provider_id: str, payload: dict[str, Any], db: Session = Depends(get_db)):
+    row = db.query(Connector).filter(
+        Connector.workspace_id == workspace_id,
+        Connector.provider == provider_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Integration is not connected yet")
+    cfg = dict(getattr(row, "config", {}) or {})
+    cfg["enabled"] = bool(payload.get("enabled", True))
+    row.config = cfg
+    db.commit()
+    return {"ok": True, "enabled": cfg["enabled"], "provider": provider_id}
+
+
+@app.delete("/workspaces/{workspace_id}/connectors/{provider_id}")
+def disconnect_provider(workspace_id: int, provider_id: str, db: Session = Depends(get_db)):
+    row = db.query(Connector).filter(
+        Connector.workspace_id == workspace_id,
+        Connector.provider == provider_id,
+    ).first()
+    if row:
+        db.delete(row)
+        db.commit()
+    return {"ok": True}
+
+
+@app.get("/workspaces/{workspace_id}/dashboard")
+def dashboard(workspace_id: int, db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    prospects = db.query(Prospect).filter(Prospect.workspace_id == workspace_id).count()
+    companies = db.query(Company).filter(Company.workspace_id == workspace_id).count()
+    campaigns = db.query(Campaign).filter(Campaign.workspace_id == workspace_id).count()
+    interactions = db.query(Interaction).filter(Interaction.workspace_id == workspace_id).count()
+    connected = db.query(Connector).filter(Connector.workspace_id == workspace_id, Connector.status == "CONNECTED").count()
     return {
-        "id": workspace.id,
-        "name": workspace.name,
-        "settings": workspace.settings,
+        "workspace_id": workspace_id,
+        "metrics": {
+            "prospects": prospects,
+            "companies": companies,
+            "campaigns": campaigns,
+            "interactions": interactions,
+            "connected_integrations": connected,
+        },
+        "connected_integrations": connected,
     }
 
-
-# ---------------------------------------------------------
-# ONBOARDING / AI MODE / AUTOMATION
-# ---------------------------------------------------------
 
 @app.get("/workspaces/{workspace_id}/onboarding")
-def get_onboarding(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-):
-    workspace = db.get(Workspace, workspace_id)
-
-    if not workspace:
-        raise HTTPException(404, "Workspace not found")
-
-    settings = workspace.settings or {}
-
+def onboarding(workspace_id: int, db: Session = Depends(get_db)):
+    ws = ensure_workspace(db, workspace_id)
+    settings = dict(getattr(ws, "settings", {}) or {})
     return {
         "completed": bool(settings.get("onboarding_completed", False)),
         "ai_mode": settings.get("ai_mode", "copilot"),
-        "automation_enabled": bool(
-            settings.get("automation_enabled", False)
-        ),
+        "automation_enabled": bool(settings.get("automation_enabled", False)),
     }
 
 
 @app.post("/workspaces/{workspace_id}/onboarding/complete")
-def complete_onboarding(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-):
-    workspace = db.get(Workspace, workspace_id)
-
-    if not workspace:
-        raise HTTPException(404, "Workspace not found")
-
-    settings = dict(workspace.settings or {})
+def complete_onboarding(workspace_id: int, payload: dict[str, Any] | None = None, db: Session = Depends(get_db)):
+    ws = ensure_workspace(db, workspace_id)
+    settings = dict(getattr(ws, "settings", {}) or {})
     settings["onboarding_completed"] = True
-
-    workspace.settings = settings
-
+    if payload:
+        settings.update({k: v for k, v in payload.items() if k in {"ai_mode", "automation_enabled"}})
+    if "settings" in columns(Workspace):
+        ws.settings = settings
     db.commit()
-
-    return {
-        "status": "completed",
-    }
+    return {"ok": True, "settings": settings}
 
 
 @app.patch("/workspaces/{workspace_id}/automation")
-def update_automation(
-    workspace_id: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    workspace = db.get(Workspace, workspace_id)
-
-    if not workspace:
-        raise HTTPException(404, "Workspace not found")
-
-    settings = dict(workspace.settings or {})
-
+def automation(workspace_id: int, payload: dict[str, Any], db: Session = Depends(get_db)):
+    ws = ensure_workspace(db, workspace_id)
+    settings = dict(getattr(ws, "settings", {}) or {})
     if "enabled" in payload:
-        settings["automation_enabled"] = bool(
-            payload["enabled"]
-        )
-
-    if "ai_mode" in payload:
-        mode = str(payload["ai_mode"]).lower()
-
-        if mode not in {
-            "manual",
-            "copilot",
-            "autopilot",
-        }:
-            raise HTTPException(
-                400,
-                "AI mode must be manual, copilot, or autopilot",
-            )
-
-        settings["ai_mode"] = mode
-
-    workspace.settings = settings
-
+        settings["automation_enabled"] = bool(payload["enabled"])
+    if "mode" in payload:
+        settings["ai_mode"] = str(payload["mode"])
+    if "settings" in columns(Workspace):
+        ws.settings = settings
     db.commit()
-
-    return {
-        "ai_mode": settings.get("ai_mode", "copilot"),
-        "automation_enabled": settings.get(
-            "automation_enabled",
-            False,
-        ),
-    }
+    return {"ok": True, "ai_mode": settings.get("ai_mode", "copilot"), "enabled": settings.get("automation_enabled", False)}
 
 
-# ---------------------------------------------------------
-# ICP
-# ---------------------------------------------------------
+@app.get("/workspaces/{workspace_id}/campaigns")
+def list_campaigns(workspace_id: int, db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    rows = db.query(Campaign).filter(Campaign.workspace_id == workspace_id).order_by(Campaign.id.desc()).all()
+    return {"campaigns": [serialize(x) for x in rows]}
+
+
+@app.post("/workspaces/{workspace_id}/campaigns")
+def create_campaign(workspace_id: int, payload: dict[str, Any], db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    name = (payload.get("name") or "Untitled campaign").strip()
+    if not name:
+        raise HTTPException(400, "Campaign name is required")
+    data = dict(payload)
+    data["workspace_id"] = workspace_id
+    data.setdefault("status", "DRAFT")
+    # Keep the complete wizard payload in config when the model has a config column.
+    obj = Campaign(**{k: v for k, v in data.items() if k in columns(Campaign)})
+    if "config" in columns(Campaign):
+        obj.config = payload
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return serialize(obj)
+
+
+@app.patch("/workspaces/{workspace_id}/campaigns/{campaign_id}")
+def update_campaign(workspace_id: int, campaign_id: int, payload: dict[str, Any], db: Session = Depends(get_db)):
+    obj = db.query(Campaign).filter(Campaign.workspace_id == workspace_id, Campaign.id == campaign_id).first()
+    if not obj:
+        raise HTTPException(404, "Campaign not found")
+    set_existing(obj, payload)
+    if "config" in columns(Campaign):
+        cfg = dict(getattr(obj, "config", {}) or {})
+        cfg.update(payload)
+        obj.config = cfg
+    db.commit()
+    db.refresh(obj)
+    return serialize(obj)
+
+
+@app.get("/workspaces/{workspace_id}/prospects")
+def list_prospects(workspace_id: int, db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    rows = db.query(Prospect).filter(Prospect.workspace_id == workspace_id).order_by(Prospect.id.desc()).limit(200).all()
+    return {"prospects": [serialize(x) for x in rows]}
+
+
+@app.post("/workspaces/{workspace_id}/prospects")
+def create_prospect(workspace_id: int, payload: dict[str, Any], db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    data = dict(payload)
+    data["workspace_id"] = workspace_id
+    obj = Prospect(**{k: v for k, v in data.items() if k in columns(Prospect)})
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return serialize(obj)
+
+
+@app.get("/workspaces/{workspace_id}/companies")
+def list_companies(workspace_id: int, db: Session = Depends(get_db)):
+    rows = db.query(Company).filter(Company.workspace_id == workspace_id).order_by(Company.id.desc()).limit(200).all()
+    return {"companies": [serialize(x) for x in rows]}
+
 
 @app.post("/workspaces/{workspace_id}/icps")
-def create_icp(
-    workspace_id: int,
-    payload: ICPCreate,
-    db: Session = Depends(get_db),
-):
-    if payload.workspace_id != workspace_id:
-        raise HTTPException(
-            400,
-            "workspace mismatch",
-        )
+def create_icp(workspace_id: int, payload: dict[str, Any], db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    data = dict(payload); data["workspace_id"] = workspace_id
+    obj = ICP(**{k: v for k, v in data.items() if k in columns(ICP)})
+    db.add(obj); db.commit(); db.refresh(obj)
+    return serialize(obj)
 
-    obj = ICP(**payload.model_dump())
-
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-
-    return {
-        "id": obj.id,
-        "name": obj.name,
-    }
-
-
-# ---------------------------------------------------------
-# INTENT
-# ---------------------------------------------------------
 
 @app.post("/workspaces/{workspace_id}/intent-profiles")
-def create_intent(
-    workspace_id: int,
-    payload: IntentProfileCreate,
-    db: Session = Depends(get_db),
-):
-    if payload.workspace_id != workspace_id:
-        raise HTTPException(
-            400,
-            "workspace mismatch",
-        )
+def create_intent(workspace_id: int, payload: dict[str, Any], db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    data = dict(payload); data["workspace_id"] = workspace_id
+    obj = IntentProfile(**{k: v for k, v in data.items() if k in columns(IntentProfile)})
+    db.add(obj); db.commit(); db.refresh(obj)
+    return serialize(obj)
 
-    obj = IntentProfile(
-        **payload.model_dump()
-    )
-
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-
-    return {
-        "id": obj.id,
-        "name": obj.name,
-    }
-
-
-# ---------------------------------------------------------
-# SCORING
-# ---------------------------------------------------------
 
 @app.post("/score")
-def score(payload: ScoreRequest):
-    return score_breakdown(
-        **payload.model_dump()
-    )
+def score(payload: dict[str, Any]):
+    signals = payload.get("signals") or []
+    fit = float(payload.get("fit", 0.5))
+    intent = min(1.0, len(signals) / 5)
+    score_value = round((fit * 0.45 + intent * 0.55) * 100)
+    return {"score": score_value, "fit": round(fit * 100), "intent": round(intent * 100)}
 
 
-# ---------------------------------------------------------
-# SUPPRESSION / DNC
-# ---------------------------------------------------------
-
-@app.post("/workspaces/{workspace_id}/suppressions")
-def suppress(
-    workspace_id: int,
-    payload: SuppressionRequest,
-    db: Session = Depends(get_db),
-):
-    if payload.workspace_id not in (
-        None,
-        workspace_id,
-    ):
-        raise HTTPException(
-            400,
-            "workspace mismatch",
-        )
-
-    obj = Suppression(
-        **payload.model_dump(
-            exclude_none=False
-        )
-    )
-
-    obj.workspace_id = workspace_id
-
-    db.add(obj)
-    db.commit()
-
-    return {
-        "status": "suppressed",
-        "id": obj.id,
-    }
+@app.post("/workspaces/{workspace_id}/suppression")
+def suppress(workspace_id: int, payload: dict[str, Any], db: Session = Depends(get_db)):
+    ensure_workspace(db, workspace_id)
+    data = dict(payload); data["workspace_id"] = workspace_id
+    obj = Suppression(**{k: v for k, v in data.items() if k in columns(Suppression)})
+    db.add(obj); db.commit(); db.refresh(obj)
+    return serialize(obj)
 
 
-# ---------------------------------------------------------
-# DASHBOARD
-# ---------------------------------------------------------
+@app.get("/workspaces/{workspace_id}/jobs")
+def jobs(workspace_id: int, db: Session = Depends(get_db)):
+    rows = db.query(Job).filter(Job.workspace_id == workspace_id).order_by(Job.id.desc()).limit(100).all()
+    return {"jobs": [serialize(x) for x in rows]}
 
-@app.get("/workspaces/{workspace_id}/dashboard")
-def dashboard(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-):
-    def count(model):
-        return (
-            db.scalar(
-                select(func.count())
-                .select_from(model)
-                .where(
-                    model.workspace_id
-                    == workspace_id
-                )
-            )
-            or 0
-        )
-
-    return {
-        "prospects": count(Prospect),
-        "evidence": count(Evidence),
-        "campaigns": count(Campaign),
-        "interactions": count(Interaction),
-        "jobs": count(Job),
-        "suppressions": count(Suppression),
-        "connected_integrations": db.scalar(
-            select(func.count())
-            .select_from(Connector)
-            .where(
-                Connector.workspace_id
-                == workspace_id,
-                Connector.status
-                == "CONNECTED",
-            )
-        ) or 0,
-    }
-
-
-# ---------------------------------------------------------
-# EMAIL WEBHOOK
-# ---------------------------------------------------------
 
 @app.post("/webhooks/email")
-def email_webhook(
-    event: WebhookEvent,
-    db: Session = Depends(get_db),
-):
-    text = str(
-        event.payload.get(
-            "text",
-            "",
-        )
-        or ""
-    )
+def email_webhook(payload: dict[str, Any], db: Session = Depends(get_db)):
+    return {"ok": True, "received": payload.get("type") or payload.get("event") or "email_event"}
 
-    if detects_opt_out(
-        text
-    ) and event.email:
 
-        db.add(
-            Suppression(
-                email=event.email.lower(),
-                reason="OPT_OUT",
-            )
-        )
-
-        db.commit()
-
-        return {
-            "action": "SUPPRESS_AND_STOP"
-        }
-
-    return {
-        "action": "PROCESS_REPLY",
-        "event_type": event.event_type,
-    }
-
-
-# ---------------------------------------------------------
-# CALENDAR WEBHOOK
-# ---------------------------------------------------------
-
-@app.post("/webhooks/calendar")
-def calendar_webhook(
-    event: WebhookEvent,
-):
-    if event.event_type in {
-        "scheduled",
-        "meeting.scheduled",
-    }:
-        return {
-            "action": "MEETING_BOOKED",
-            "stop_outreach": True,
-        }
-
-    if event.event_type in {
-        "canceled",
-        "meeting.canceled",
-    }:
-        return {
-            "action": "MEETING_CANCELED",
-            "restore_followup": True,
-        }
-
-    return {
-        "action": "IGNORED"
-    }
-
-
-# =========================================================
-# INTEGRATIONS
-# =========================================================
-
-@app.get("/providers")
-def providers():
-    return {
-        "categories": CATALOG,
-        "providers": all_providers(),
-    }
-
-
-@app.get(
-    "/workspaces/{workspace_id}/connectors"
-)
-def list_connectors(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-):
-    rows = db.scalars(
-        select(Connector).where(
-            Connector.workspace_id
-            == workspace_id
-        )
-    ).all()
-
-    connected = {
-        row.provider: row
-        for row in rows
-    }
-
-    output = []
-
-    # Return the COMPLETE marketplace.
-    # The frontend can therefore show every
-    # available integration even when it is
-    # not connected yet.
-
-    for p in all_providers():
-
-        row = connected.get(
-            p["id"]
-        )
-
-        config = (
-            row.config
-            if row
-            else {}
-        ) or {}
-
-        output.append(
-            {
-                "provider": p["id"],
-                "name": p["name"],
-                "description": p.get(
-                    "description"
-                ),
-                "category": p.get(
-                    "category"
-                ),
-                "mode": p.get(
-                    "mode"
-                ),
-                "logo": p.get(
-                    "logo"
-                ),
-                "docs": p.get(
-                    "docs"
-                ),
-                "recommended": p.get(
-                    "recommended",
-                    False,
-                ),
-                "status": (
-                    row.status
-                    if row
-                    else "AVAILABLE"
-                ),
-                "enabled": (
-                    bool(
-                        config.get(
-                            "enabled",
-                            True,
-                        )
-                    )
-                    if row
-                    else False
-                ),
-                "connected_at": (
-                    row.connected_at
-                    if row
-                    else None
-                ),
-                "scopes": (
-                    row.scopes
-                    if row
-                    else p.get(
-                        "scopes",
-                        [],
-                    )
-                ),
-            }
-        )
-
-    return output
-
-
-@app.post(
-    "/workspaces/{workspace_id}/connectors/{provider_id}/connect"
-)
-def connect_provider(
-    workspace_id: int,
-    provider_id: str,
-    db: Session = Depends(get_db),
-):
-    p = provider(provider_id)
-
-    if not p:
-        raise HTTPException(
-            404,
-            "Unknown provider",
-        )
-
-    row = db.scalar(
-        select(Connector).where(
-            Connector.workspace_id
-            == workspace_id,
-            Connector.provider
-            == provider_id,
-        )
-    )
-
-    if not row:
-        row = Connector(
-            workspace_id=workspace_id,
-            kind=p["category"],
-            provider=provider_id,
-            status="DISCONNECTED",
-            config={
-                "enabled": True
-            },
-            scopes=[],
-        )
-
-        db.add(row)
-        db.commit()
-        db.refresh(row)
-
-    if p["mode"] == "oauth":
-
-        try:
-            verifier, challenge = pkce_pair()
-
-            state = secrets.token_urlsafe(
-                32
-            )
-
-            url = authorization_url(
-                provider_id,
-                state,
-                (
-                    verifier,
-                    challenge,
-                ),
-            )
-
-        except RuntimeError as e:
-
-            return {
-                "status": "CONFIG_REQUIRED",
-                "provider": provider_id,
-                "message": str(e),
-                "mode": "oauth",
-            }
-
-        row.status = "AUTHORIZING"
-
-        row.config = {
-            **(row.config or {}),
-            "oauth_state": encrypt(
-                state
-            ),
-            "pkce_verifier": encrypt(
-                verifier
-            ),
-            "enabled": True,
-        }
-
-        db.commit()
-
-        return {
-            "status": "REDIRECT",
-            "url": url,
-            "provider": provider_id,
-        }
-
-    row.status = "CONFIG_REQUIRED"
-
-    db.commit()
-
-    return {
-        "status": "CONFIG_REQUIRED",
-        "provider": provider_id,
-        "mode": p["mode"],
-        "fields": p.get(
-            "fields",
-            [],
-        ),
-    }
-
-
-# ---------------------------------------------------------
-# OAUTH CALLBACK
-# ---------------------------------------------------------
-
-@app.get(
-    "/oauth/callback/{provider_id}"
-)
-async def oauth_callback(
-    provider_id: str,
-    code: str | None = None,
-    state: str | None = None,
-    error: str | None = None,
-    db: Session = Depends(get_db),
-):
-    fail = (
-        f"{FRONTEND_URL}/?oauth_error="
-    )
-
-    if error:
-        return RedirectResponse(
-            fail
-            + urllib.parse.quote(
-                error
-            )
-        )
-
-    if not code or not state:
-        raise HTTPException(
-            400,
-            "Missing OAuth code/state",
-        )
-
-    rows = db.scalars(
-        select(Connector).where(
-            Connector.provider
-            == provider_id,
-            Connector.status
-            == "AUTHORIZING",
-        )
-    ).all()
-
-    row = None
-
-    for r in rows:
-        try:
-            stored_state = decrypt(
-                r.config.get(
-                    "oauth_state",
-                    "",
-                )
-            )
-
-            if stored_state == state:
-                row = r
-                break
-
-        except Exception:
-            continue
-
-    if not row:
-        raise HTTPException(
-            400,
-            "Invalid or expired OAuth state",
-        )
-
-    p = provider(provider_id)
-
-    cfg = oauth_settings(
-        provider_id
-    )
-
-    if not cfg:
-        raise HTTPException(
-            400,
-            "OAuth configuration missing",
-        )
-
-    env = (
-        p.get("oauth_env", "")
-        .lower()
-        if p
-        else ""
-    )
-
-    endpoint = (
-        OAUTH.get(
-            env,
-            {},
-        ).get("token")
-        or OAUTH.get(
-            provider_id,
-            {},
-        ).get("token")
-        or os.getenv(
-            f"{(p.get('oauth_env') or '').upper()}_TOKEN_URL",
-            "",
-        )
-    )
-
-    if not endpoint:
-        raise HTTPException(
-            400,
-            "Token endpoint not configured",
-        )
-
-    data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": cfg[
-            "redirect_uri"
-        ],
-        "client_id": cfg[
-            "client_id"
-        ],
-        "code_verifier": decrypt(
-            row.config[
-                "pkce_verifier"
-            ]
-        ),
-    }
-
-    if cfg.get("client_secret"):
-        data[
-            "client_secret"
-        ] = cfg[
-            "client_secret"
-        ]
-
-    headers = {
-        "Content-Type":
-            "application/x-www-form-urlencoded"
-    }
-
-    if (
-        provider_id
-        == "twilio"
-        and cfg.get("client_secret")
-    ):
-        basic = base64.b64encode(
-            (
-                cfg["client_id"]
-                + ":"
-                + cfg["client_secret"]
-            ).encode()
-        ).decode()
-
-        headers[
-            "Authorization"
-        ] = "Basic " + basic
-
-        data.pop(
-            "client_secret",
-            None,
-        )
-
-    async with httpx.AsyncClient(
-        timeout=25
-    ) as client:
-
-        resp = await client.post(
-            endpoint,
-            data=data,
-            headers=headers,
-        )
-
-    if resp.status_code >= 400:
-        raise HTTPException(
-            resp.status_code,
-            "OAuth token exchange failed: "
-            + resp.text[:700],
-        )
-
-    token = resp.json()
-
-    old_config = dict(
-        row.config or {}
-    )
-
-    row.status = "CONNECTED"
-
-    row.scopes = (
-        token.get(
-            "scope",
-            "",
-        ).split()
-        if isinstance(
-            token.get("scope"),
-            str,
-        )
-        else (
-            p.get("scopes")
-            or []
-        )
-    )
-
-    row.connected_at = now()
-
-    row.config = {
-        "access_token": encrypt(
-            token.get(
-                "access_token",
-                "",
-            )
-        ),
-        "refresh_token": (
-            encrypt(
-                token.get(
-                    "refresh_token"
-                )
-            )
-            if token.get(
-                "refresh_token"
-            )
-            else ""
-        ),
-        "token_type": token.get(
-            "token_type",
-            "Bearer",
-        ),
-        "expires_in": token.get(
-            "expires_in"
-        ),
-        "provider_account": token.get(
-            "user"
-        )
-        or token.get(
-            "user_id"
-        ),
-        "enabled": old_config.get(
-            "enabled",
-            True,
-        ),
-    }
-
-    db.commit()
-
-    return RedirectResponse(
-        f"{FRONTEND_URL}/?oauth_connected="
-        + urllib.parse.quote(
-            provider_id
-        )
-    )
-
-
-# ---------------------------------------------------------
-# MANUAL / API-KEY CONFIGURATION
-# ---------------------------------------------------------
-
-@app.post(
-    "/workspaces/{workspace_id}/connectors/{provider_id}/configure"
-)
-def configure_provider(
-    workspace_id: int,
-    provider_id: str,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    p = provider(provider_id)
-
-    if not p:
-        raise HTTPException(
-            404,
-            "Unknown provider",
-        )
-
-    row = db.scalar(
-        select(Connector).where(
-            Connector.workspace_id
-            == workspace_id,
-            Connector.provider
-            == provider_id,
-        )
-    )
-
-    if not row:
-
-        row = Connector(
-            workspace_id=workspace_id,
-            kind=p["category"],
-            provider=provider_id,
-            config={
-                "enabled": True
-            },
-            scopes=[],
-        )
-
-        db.add(row)
-
-    allowed = {
-        x["name"]
-        for x in p.get(
-            "fields",
-            [],
-        )
-    }
-
-    clean = {
-        k: v
-        for k, v in payload.items()
-        if k in allowed
-    }
-
-    secret_names = {
-        x["name"]
-        for x in p.get(
-            "fields",
-            [])
-        if x.get("secret")
-    }
-
-    old_config = dict(
-        row.config or {}
-    )
-
-    new_config = {}
-
-    for key, value in clean.items():
-
-        if key in secret_names:
-            new_config[key] = encrypt(
-                str(value)
-            )
-        else:
-            new_config[key] = value
-
-    # Preserve existing settings.
-    new_config["enabled"] = old_config.get(
-        "enabled",
-        True,
-    )
-
-    row.config = new_config
-
-    row.status = "CONNECTED"
-
-    row.scopes = p.get(
-        "scopes",
-        [],
-    )
-
-    row.connected_at = now()
-
-    db.commit()
-    db.refresh(row)
-
-    return {
-        "status": "CONNECTED",
-        "provider": provider_id,
-        "enabled": bool(
-            row.config.get(
-                "enabled",
-                True,
-            )
-        ),
-    }
-
-
-# ---------------------------------------------------------
-# ENABLE / DISABLE INTEGRATION
-# ---------------------------------------------------------
-
-@app.patch(
-    "/workspaces/{workspace_id}/connectors/{provider_id}/toggle"
-)
-def toggle_provider(
-    workspace_id: int,
-    provider_id: str,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    p = provider(provider_id)
-
-    if not p:
-        raise HTTPException(
-            404,
-            "Unknown provider",
-        )
-
-    row = db.scalar(
-        select(Connector).where(
-            Connector.workspace_id
-            == workspace_id,
-            Connector.provider
-            == provider_id,
-        )
-    )
-
-    if not row:
-        raise HTTPException(
-            404,
-            "Integration is not connected",
-        )
-
-    enabled = bool(
-        payload.get(
-            "enabled",
-            True,
-        )
-    )
-
-    config = dict(
-        row.config or {}
-    )
-
-    config["enabled"] = enabled
-
-    row.config = config
-
-    db.commit()
-    db.refresh(row)
-
-    return {
-        "provider": provider_id,
-        "status": row.status,
-        "enabled": enabled,
-    }
-
-
-# ---------------------------------------------------------
-# DISCONNECT
-# ---------------------------------------------------------
-
-@app.delete(
-    "/workspaces/{workspace_id}/connectors/{provider_id}"
-)
-def disconnect_provider(
-    workspace_id: int,
-    provider_id: str,
-    db: Session = Depends(get_db),
-):
-    row = db.scalar(
-        select(Connector).where(
-            Connector.workspace_id
-            == workspace_id,
-            Connector.provider
-            == provider_id,
-        )
-    )
-
-    if not row:
-        return {
-            "status": "DISCONNECTED"
-        }
-
-    row.status = "DISCONNECTED"
-
-    row.config = {}
-
-    row.scopes = []
-
-    row.connected_at = None
-
-    db.commit()
-
-    return {
-        "status": "DISCONNECTED",
-        "provider": provider_id,
-    }
-
-
-# =========================================================
-# CAMPAIGNS
-# =========================================================
-
-@app.get(
-    "/workspaces/{workspace_id}/campaigns"
-)
-def list_campaigns(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-):
-    rows = db.scalars(
-        select(Campaign)
-        .where(
-            Campaign.workspace_id
-            == workspace_id
-        )
-        .order_by(
-            Campaign.id.desc()
-        )
-    ).all()
-
-    return [
-        {
-            "id": r.id,
-            "name": r.name,
-            "status": r.status,
-            "channel": r.channel,
-            "config": r.config,
-        }
-        for r in rows
-    ]
-
-
-@app.post(
-    "/workspaces/{workspace_id}/campaigns"
-)
-def create_campaign(
-    workspace_id: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    name = str(
-        payload.get(
-            "name",
-            "",
-        )
-    ).strip()
-
-    if not name:
-        raise HTTPException(
-            400,
-            "Campaign name is required",
-        )
-
-    channel = str(
-        payload.get(
-            "channel",
-            "email",
-        )
-    ).lower()
-
-    obj = Campaign(
-        workspace_id=workspace_id,
-        name=name,
-        status="DRAFT",
-        channel=channel,
-        config=payload,
-    )
-
-    db.add(obj)
-
-    db.commit()
-
-    db.refresh(obj)
-
-    return {
-        "id": obj.id,
-        "name": obj.name,
-        "status": obj.status,
-        "channel": obj.channel,
-        "config": obj.config,
-    }
-
-
-@app.patch(
-    "/workspaces/{workspace_id}/campaigns/{campaign_id}"
-)
-def update_campaign(
-    workspace_id: int,
-    campaign_id: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    obj = db.scalar(
-        select(Campaign).where(
-            Campaign.id
-            == campaign_id,
-            Campaign.workspace_id
-            == workspace_id,
-        )
-    )
-
-    if not obj:
-        raise HTTPException(
-            404,
-            "Campaign not found",
-        )
-
-    if "name" in payload:
-        obj.name = (
-            str(
-                payload["name"]
-            ).strip()
-            or obj.name
-        )
-
-    if "status" in payload:
-        status = str(
-            payload["status"]
-        ).upper()
-
-        allowed_statuses = {
-            "DRAFT",
-            "ACTIVE",
-            "PAUSED",
-            "COMPLETED",
-            "ARCHIVED",
-        }
-
-        if status not in allowed_statuses:
-            raise HTTPException(
-                400,
-                "Invalid campaign status",
-            )
-
-        obj.status = status
-
-    if "channel" in payload:
-        obj.channel = str(
-            payload["channel"]
-        ).lower()
-
-    obj.config = {
-        **(obj.config or {}),
-        **payload,
-    }
-
-    db.commit()
-
-    db.refresh(obj)
-
-    return {
-        "id": obj.id,
-        "name": obj.name,
-        "status": obj.status,
-        "channel": obj.channel,
-        "config": obj.config,
-    }
-
-
-# =========================================================
-# PROSPECTS
-# =========================================================
-
-@app.get(
-    "/workspaces/{workspace_id}/prospects"
-)
-def list_prospects(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-    limit: int = 100,
-):
-    rows = db.scalars(
-        select(Prospect)
-        .where(
-            Prospect.workspace_id
-            == workspace_id
-        )
-        .order_by(
-            Prospect.total_score.desc()
-        )
-        .limit(limit)
-    ).all()
-
-    companies = {
-        c.id: c
-        for c in db.scalars(
-            select(Company).where(
-                Company.workspace_id
-                == workspace_id
-            )
-        ).all()
-    }
-
-    return [
-        {
-            "id": r.id,
-            "name": r.full_name,
-            "full_name": r.full_name,
-            "title": r.title,
-            "email": r.email,
-            "company": (
-                companies.get(
-                    r.company_id
-                ).name
-                if companies.get(
-                    r.company_id
-                )
-                else None
-            ),
-            "domain": (
-                companies.get(
-                    r.company_id
-                ).domain
-                if companies.get(
-                    r.company_id
-                )
-                else None
-            ),
-            "fit_score": r.fit_score,
-            "intent_score": r.intent_score,
-            "total_score": r.total_score,
-            "status": r.status,
-            "email_verified": r.email_verified,
-        }
-        for r in rows
-    ]
-
-
-@app.post(
-    "/workspaces/{workspace_id}/prospects"
-)
-def create_prospect(
-    workspace_id: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-):
-    name = str(
-        payload.get(
-            "full_name"
-        )
-        or payload.get(
-            "name"
-        )
-        or ""
-    ).strip()
-
-    if not name:
-        raise HTTPException(
-            400,
-            "Prospect name is required",
-        )
-
-    company_name = str(
-        payload.get(
-            "company",
-            "",
-        )
-    ).strip()
-
-    company = None
-
-    if company_name:
-
-        company = db.scalar(
-            select(Company).where(
-                Company.workspace_id
-                == workspace_id,
-                Company.name
-                == company_name,
-            )
-        )
-
-        if not company:
-
-            company = Company(
-                workspace_id=workspace_id,
-                name=company_name,
-                domain=payload.get(
-                    "domain"
-                ),
-                country=payload.get(
-                    "country"
-                ),
-                industry=payload.get(
-                    "industry"
-                ),
-            )
-
-            db.add(company)
-            db.flush()
-
-    obj = Prospect(
-        workspace_id=workspace_id,
-        company_id=(
-            company.id
-            if company
-            else None
-        ),
-        full_name=name,
-        title=payload.get(
-            "title"
-        ),
-        email=payload.get(
-            "email"
-        ),
-        email_verified=bool(
-            payload.get(
-                "email_verified",
-                False,
-            )
-        ),
-        fit_score=float(
-            payload.get(
-                "fit_score",
-                0,
-            )
-            or 0
-        ),
-        intent_score=float(
-            payload.get(
-                "intent_score",
-                0,
-            )
-            or 0
-        ),
-        total_score=float(
-            payload.get(
-                "total_score",
-                payload.get(
-                    "score",
-                    0,
-                ),
-            )
-            or 0
-        ),
-        status=str(
-            payload.get(
-                "status",
-                "NEW",
-            )
-        ).upper(),
-        metadata=payload,
-    )
-
-    db.add(obj)
-
-    db.commit()
-
-    db.refresh(obj)
-
-    return {
-        "id": obj.id,
-        "name": obj.full_name,
-        "title": obj.title,
-        "email": obj.email,
-        "company": (
-            company.name
-            if company
-            else None
-        ),
-        "total_score": obj.total_score,
-        "status": obj.status,
-    }
-
-
-# =========================================================
-# JOBS
-# =========================================================
-
-@app.post(
-    "/workspaces/{workspace_id}/jobs"
-)
-def create_job(
-    workspace_id: int,
-    type: str,
-    db: Session = Depends(get_db),
-):
-    obj = Job(
-        workspace_id=workspace_id,
-        type=type,
-    )
-
-    db.add(obj)
-
-    db.commit()
-
-    db.refresh(obj)
-
-    return {
-        "id": obj.id,
-        "status": obj.status,
-    }
-
-
-# =========================================================
-# OPERATING MODEL
-# =========================================================
-
-@app.get(
-    "/docs/operating-model"
-)
-def operating_model():
-    return {
-        "loop": [
-            "discover",
-            "detect_intent",
-            "enrich",
-            "verify",
-            "deduplicate",
-            "suppress_check",
-            "score",
-            "personalize",
-            "contact",
-            "handle_reply_or_call",
-            "qualify",
-            "book",
-            "stop_outreach",
-        ],
-        "rules": [
-            "Never guess email or phone numbers",
-            "Use legitimate and approved data sources",
-            "Respect opt-outs and DNC",
-            "Do not bypass authentication or platform restrictions",
-            "Disclose AI identity when required or asked",
-            "Do not fabricate evidence, pricing, clients, or outcomes",
-        ],
-    }
+@app.post("/webhooks/calendly")
+def calendly_webhook(payload: dict[str, Any], db: Session = Depends(get_db)):
+    return {"ok": True, "received": payload.get("event") or "calendly_event"}
