@@ -7,20 +7,26 @@ from urllib.parse import urlencode
 
 
 PROVIDERS = [
+
+    # ============================================================
+    # EMAIL
+    # ============================================================
+
     {
         "id": "gmail",
-        "name": "Gmail",
+        "name": "Gmail / Google Workspace",
         "vendor": "Google",
         "category": "Email",
         "auth": "oauth",
-        "description": "Send, read and track email from Google Workspace.",
+        "description": "Send and read email from a Google Workspace mailbox.",
         "logo": "https://www.gstatic.com/images/branding/product/2x/gmail_2020q4_32dp.png",
         "scopes": [
             "Send email",
             "Read replies",
-            "Delivery events",
-        ],
+            "Delivery events"
+        ]
     },
+
     {
         "id": "microsoft365",
         "name": "Microsoft 365 / Outlook",
@@ -31,36 +37,38 @@ PROVIDERS = [
         "logo": "https://img.icons8.com/color/96/microsoft-outlook-2019.png",
         "scopes": [
             "Send email",
-            "Read replies",
-            "Calendar",
-        ],
+            "Read replies"
+        ]
     },
+
     {
         "id": "resend",
         "name": "Resend",
         "vendor": "Resend",
         "category": "Email",
         "auth": "api_key",
-        "description": "Reliable transactional and outbound email delivery.",
+        "description": "Email delivery and event webhooks.",
         "logo": "https://avatars.githubusercontent.com/u/110813679?s=200&v=4",
         "scopes": [
             "Send email",
-            "Delivery events",
-        ],
+            "Delivery events"
+        ]
     },
+
     {
         "id": "sendgrid",
         "name": "SendGrid",
         "vendor": "Twilio",
         "category": "Email",
         "auth": "api_key",
-        "description": "Email delivery and event webhooks.",
+        "description": "Email delivery and event processing.",
         "logo": "https://sendgrid.com/favicon.ico",
         "scopes": [
             "Send email",
-            "Delivery events",
-        ],
+            "Delivery events"
+        ]
     },
+
     {
         "id": "mailgun",
         "name": "Mailgun",
@@ -71,9 +79,14 @@ PROVIDERS = [
         "logo": "https://www.mailgun.com/favicon.ico",
         "scopes": [
             "Send email",
-            "Events",
-        ],
+            "Events"
+        ]
     },
+
+    # ============================================================
+    # CALENDAR
+    # ============================================================
+
     {
         "id": "google_calendar",
         "name": "Google Calendar",
@@ -84,9 +97,10 @@ PROVIDERS = [
         "logo": "https://www.gstatic.com/images/branding/product/2x/calendar_2020q4_32dp.png",
         "scopes": [
             "Read calendar",
-            "Create/update events",
-        ],
+            "Create/update events"
+        ]
     },
+
     {
         "id": "outlook_calendar",
         "name": "Outlook Calendar",
@@ -97,9 +111,10 @@ PROVIDERS = [
         "logo": "https://img.icons8.com/color/96/microsoft-outlook-2019.png",
         "scopes": [
             "Read calendar",
-            "Create/update events",
-        ],
+            "Create/update events"
+        ]
     },
+
     {
         "id": "calendly",
         "name": "Calendly",
@@ -110,9 +125,14 @@ PROVIDERS = [
         "logo": "https://assets.calendly.com/assets/frontend/media/logo-80b5d6e8.svg",
         "scopes": [
             "Read events",
-            "Webhooks",
-        ],
+            "Webhooks"
+        ]
     },
+
+    # ============================================================
+    # STORAGE
+    # ============================================================
+
     {
         "id": "google_drive",
         "name": "Google Drive",
@@ -122,37 +142,44 @@ PROVIDERS = [
         "description": "Store research files and exports in Drive.",
         "logo": "https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png",
         "scopes": [
-            "Read/write files",
-        ],
+            "Read/write files"
+        ]
     },
+
+    # ============================================================
+    # CRM
+    # ============================================================
+
     {
         "id": "hubspot",
         "name": "HubSpot",
         "vendor": "HubSpot",
         "category": "CRM",
         "auth": "oauth",
-        "description": "Sync contacts, companies, lifecycle and activity.",
+        "description": "Sync contacts, companies and CRM activity.",
         "logo": "https://www.hubspot.com/hubfs/assets/hubspot.com/style-guide/brand-guidelines/guidelines-the-hubspot-logo.svg",
         "scopes": [
             "Contacts",
             "Companies",
-            "CRM activity",
-        ],
+            "CRM activity"
+        ]
     },
+
     {
         "id": "salesforce",
         "name": "Salesforce",
         "vendor": "Salesforce",
         "category": "CRM",
         "auth": "oauth",
-        "description": "Sync CRM records and qualified prospects.",
+        "description": "Sync leads, contacts and accounts.",
         "logo": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Salesforce.com_logo.svg",
         "scopes": [
             "Leads",
             "Contacts",
-            "Accounts",
-        ],
+            "Accounts"
+        ]
     },
+
     {
         "id": "pipedrive",
         "name": "Pipedrive",
@@ -164,9 +191,10 @@ PROVIDERS = [
         "scopes": [
             "Persons",
             "Organizations",
-            "Deals",
-        ],
+            "Deals"
+        ]
     },
+
     {
         "id": "zoho",
         "name": "Zoho CRM",
@@ -177,22 +205,28 @@ PROVIDERS = [
         "logo": "https://www.zohowebstatic.com/sites/default/files/zoho-logo.png",
         "scopes": [
             "Leads",
-            "Contacts",
-        ],
+            "Contacts"
+        ]
     },
+
+    # ============================================================
+    # DATA
+    # ============================================================
+
     {
         "id": "apollo",
         "name": "Apollo",
         "vendor": "Apollo",
         "category": "Data & Enrichment",
         "auth": "api_key",
-        "description": "Use your Apollo account for prospect discovery and enrichment.",
+        "description": "Use your Apollo account for discovery and enrichment.",
         "logo": "https://www.apollo.io/images-v3/logo.svg",
         "scopes": [
             "Search",
-            "Enrichment",
-        ],
+            "Enrichment"
+        ]
     },
+
     {
         "id": "hunter",
         "name": "Hunter",
@@ -203,9 +237,10 @@ PROVIDERS = [
         "logo": "https://hunter.io/favicon-32x32.png",
         "scopes": [
             "Email finder",
-            "Verification",
-        ],
+            "Verification"
+        ]
     },
+
     {
         "id": "peopledatalabs",
         "name": "People Data Labs",
@@ -216,9 +251,10 @@ PROVIDERS = [
         "logo": "https://www.peopledatalabs.com/favicon.ico",
         "scopes": [
             "Person",
-            "Company",
-        ],
+            "Company"
+        ]
     },
+
     {
         "id": "crunchbase",
         "name": "Crunchbase",
@@ -229,9 +265,14 @@ PROVIDERS = [
         "logo": "https://www.crunchbase.com/favicon.ico",
         "scopes": [
             "Companies",
-            "Funding",
-        ],
+            "Funding"
+        ]
     },
+
+    # ============================================================
+    # AI / LLM
+    # ============================================================
+
     {
         "id": "openai",
         "name": "OpenAI",
@@ -242,8 +283,10 @@ PROVIDERS = [
         "logo": "https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg",
         "scopes": [
             "LLM inference",
-        ],
+            "Model selection"
+        ]
     },
+
     {
         "id": "anthropic",
         "name": "Anthropic / Claude",
@@ -254,8 +297,10 @@ PROVIDERS = [
         "logo": "https://www.anthropic.com/favicon.ico",
         "scopes": [
             "LLM inference",
-        ],
+            "Model selection"
+        ]
     },
+
     {
         "id": "gemini",
         "name": "Google Gemini",
@@ -266,8 +311,10 @@ PROVIDERS = [
         "logo": "https://www.gstatic.com/lamda/images/gemini_favicon_1c1a01ba6d3f4f5f8d9f.png",
         "scopes": [
             "LLM inference",
-        ],
+            "Model selection"
+        ]
     },
+
     {
         "id": "openrouter",
         "name": "OpenRouter",
@@ -278,8 +325,14 @@ PROVIDERS = [
         "logo": "https://openrouter.ai/favicon.ico",
         "scopes": [
             "LLM routing",
-        ],
+            "Model selection"
+        ]
     },
+
+    # ============================================================
+    # VOICE / MESSAGING
+    # ============================================================
+
     {
         "id": "twilio",
         "name": "Twilio",
@@ -290,9 +343,10 @@ PROVIDERS = [
         "logo": "https://www.twilio.com/favicon.ico",
         "scopes": [
             "SMS",
-            "Voice",
-        ],
+            "Voice"
+        ]
     },
+
     {
         "id": "whatsapp",
         "name": "WhatsApp Business",
@@ -303,21 +357,27 @@ PROVIDERS = [
         "logo": "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg",
         "scopes": [
             "Send messages",
-            "Webhooks",
-        ],
+            "Webhooks"
+        ]
     },
+
+    # ============================================================
+    # NOTIFICATIONS
+    # ============================================================
+
     {
         "id": "slack",
         "name": "Slack",
         "vendor": "Slack",
         "category": "Notifications",
         "auth": "oauth",
-        "description": "Internal alerts, handoffs and operational notifications.",
+        "description": "Internal alerts and handoffs.",
         "logo": "https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png",
         "scopes": [
-            "Send messages",
-        ],
+            "Send messages"
+        ]
     },
+
     {
         "id": "teams",
         "name": "Microsoft Teams",
@@ -327,315 +387,394 @@ PROVIDERS = [
         "description": "Internal SignalOS notifications and handoffs.",
         "logo": "https://img.icons8.com/color/96/microsoft-teams.png",
         "scopes": [
-            "Send messages",
-        ],
+            "Send messages"
+        ]
     },
+
     {
         "id": "webhook",
         "name": "Custom Webhook",
         "vendor": "SignalOS",
         "category": "Notifications",
         "auth": "api_key",
-        "description": "Send SignalOS events to any authorized webhook.",
+        "description": "Send SignalOS events to an authorized webhook.",
         "logo": "https://cdn-icons-png.flaticon.com/512/126/126472.png",
         "scopes": [
-            "Outbound events",
-        ],
-    },
+            "Outbound events"
+        ]
+    }
 ]
 
 
-def provider_by_id(pid):
+def provider_by_id(pid: str):
     return next(
-        (
-            provider
-            for provider in PROVIDERS
-            if provider["id"] == pid
-        ),
-        None,
+        (p for p in PROVIDERS if p["id"] == pid),
+        None
     )
 
 
 def env(*names):
     for name in names:
-        if os.getenv(name):
-            return os.getenv(name)
-
+        value = os.getenv(name)
+        if value:
+            return value
     return None
 
 
-def auth_url(pid):
+def oauth_config(pid: str):
+
+    configs = {
+
+        "gmail": (
+            "GOOGLE_CLIENT_ID",
+            "GOOGLE_CLIENT_SECRET",
+            "GOOGLE_GMAIL_REDIRECT_URI"
+        ),
+
+        "google_calendar": (
+            "GOOGLE_CLIENT_ID",
+            "GOOGLE_CLIENT_SECRET",
+            "GOOGLE_CALENDAR_REDIRECT_URI"
+        ),
+
+        "google_drive": (
+            "GOOGLE_CLIENT_ID",
+            "GOOGLE_CLIENT_SECRET",
+            "GOOGLE_DRIVE_REDIRECT_URI"
+        ),
+
+        "microsoft365": (
+            "MICROSOFT_CLIENT_ID",
+            "MICROSOFT_CLIENT_SECRET",
+            "MICROSOFT_OUTLOOK_REDIRECT_URI"
+        ),
+
+        "outlook_calendar": (
+            "MICROSOFT_CLIENT_ID",
+            "MICROSOFT_CLIENT_SECRET",
+            "MICROSOFT_CALENDAR_REDIRECT_URI"
+        ),
+
+        "teams": (
+            "MICROSOFT_CLIENT_ID",
+            "MICROSOFT_CLIENT_SECRET",
+            "MICROSOFT_TEAMS_REDIRECT_URI"
+        ),
+
+        "calendly": (
+            "CALENDLY_CLIENT_ID",
+            "CALENDLY_CLIENT_SECRET",
+            "CALENDLY_REDIRECT_URI"
+        ),
+
+        "hubspot": (
+            "HUBSPOT_CLIENT_ID",
+            "HUBSPOT_CLIENT_SECRET",
+            "HUBSPOT_REDIRECT_URI"
+        ),
+
+        "salesforce": (
+            "SALESFORCE_CLIENT_ID",
+            "SALESFORCE_CLIENT_SECRET",
+            "SALESFORCE_REDIRECT_URI"
+        ),
+
+        "slack": (
+            "SLACK_CLIENT_ID",
+            "SLACK_CLIENT_SECRET",
+            "SLACK_REDIRECT_URI"
+        ),
+
+        "whatsapp": (
+            "META_CLIENT_ID",
+            "META_CLIENT_SECRET",
+            "META_REDIRECT_URI"
+        ),
+
+        "zoho": (
+            "ZOHO_CLIENT_ID",
+            "ZOHO_CLIENT_SECRET",
+            "ZOHO_REDIRECT_URI"
+        )
+    }
+
+    if pid not in configs:
+        return None
+
+    client_id_name, client_secret_name, redirect_name = configs[pid]
+
+    client_id = env(client_id_name)
+    client_secret = env(client_secret_name)
+    redirect_uri = env(redirect_name)
+
+    if not client_id or not client_secret or not redirect_uri:
+        return None
+
+    token_urls = {
+
+        "gmail": "https://oauth2.googleapis.com/token",
+
+        "google_calendar": "https://oauth2.googleapis.com/token",
+
+        "google_drive": "https://oauth2.googleapis.com/token",
+
+        "microsoft365":
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+
+        "outlook_calendar":
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+
+        "teams":
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+
+        "calendly":
+            "https://auth.calendly.com/oauth/token",
+
+        "hubspot":
+            "https://api.hubapi.com/oauth/v1/token",
+
+        "salesforce":
+            "https://login.salesforce.com/services/oauth2/token",
+
+        "slack":
+            "https://slack.com/api/oauth.v2.access",
+
+        "whatsapp":
+            "https://graph.facebook.com/v23.0/oauth/access_token",
+
+        "zoho":
+            "https://accounts.zoho.com/oauth/v2/token"
+    }
+
+    return {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "token_url": token_urls[pid]
+    }
+
+
+def build_authorization_url(pid: str):
+
     state = secrets.token_urlsafe(32)
 
     provider = provider_by_id(pid)
 
     if not provider:
-        raise ValueError("Provider not found")
+        raise ValueError("Provider not found.")
 
     if provider["auth"] != "oauth":
         raise ValueError(
             "This provider uses secure API-key configuration."
         )
 
-    if pid == "gmail":
-        client_id = env("GOOGLE_CLIENT_ID")
-        redirect = env(
-            "GOOGLE_GMAIL_REDIRECT_URI",
-            "GOOGLE_REDIRECT_URI",
+    config = oauth_config(pid)
+
+    if not config:
+        raise ValueError(
+            f"{provider['name']} OAuth is not configured on the SignalOS server."
         )
 
-        if not client_id or not redirect:
-            raise ValueError(
-                "Google OAuth is not configured on the SignalOS server."
-            )
+    # ------------------------------------------------------------
+    # GOOGLE
+    # ------------------------------------------------------------
 
-        query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
-            "response_type": "code",
-            "access_type": "offline",
-            "prompt": "consent",
-            "scope": (
+    if pid in {
+        "gmail",
+        "google_calendar",
+        "google_drive"
+    }:
+
+        scopes = {
+
+            "gmail":
                 "openid email "
                 "https://www.googleapis.com/auth/gmail.send "
-                "https://www.googleapis.com/auth/gmail.readonly"
-            ),
-            "state": state,
-        }
+                "https://www.googleapis.com/auth/gmail.readonly",
 
-        return (
-            "https://accounts.google.com/o/oauth2/v2/auth?"
-            + urlencode(query),
-            state,
-        )
+            "google_calendar":
+                "openid email "
+                "https://www.googleapis.com/auth/calendar",
 
-    if pid == "google_calendar":
-        client_id = env("GOOGLE_CLIENT_ID")
-        redirect = env(
-            "GOOGLE_CALENDAR_REDIRECT_URI",
-            "GOOGLE_REDIRECT_URI",
-        )
-
-        if not client_id or not redirect:
-            raise ValueError(
-                "Google OAuth is not configured on the SignalOS server."
-            )
+            "google_drive":
+                "openid email "
+                "https://www.googleapis.com/auth/drive.file"
+        }[pid]
 
         query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
             "response_type": "code",
             "access_type": "offline",
             "prompt": "consent",
-            "scope": (
-                "openid email "
-                "https://www.googleapis.com/auth/calendar"
-            ),
-            "state": state,
+            "scope": scopes,
+            "state": state
         }
 
         return (
             "https://accounts.google.com/o/oauth2/v2/auth?"
             + urlencode(query),
-            state,
+            state
         )
 
-    if pid == "microsoft365":
-        client_id = env("MICROSOFT_CLIENT_ID")
-        redirect = env(
-            "MICROSOFT_OUTLOOK_REDIRECT_URI",
-            "MICROSOFT_REDIRECT_URI",
-        )
+    # ------------------------------------------------------------
+    # MICROSOFT
+    # ------------------------------------------------------------
 
-        if not client_id or not redirect:
-            raise ValueError(
-                "Microsoft OAuth is not configured on the SignalOS server."
-            )
+    if pid in {
+        "microsoft365",
+        "outlook_calendar",
+        "teams"
+    }:
+
+        scopes = {
+
+            "microsoft365":
+                "openid email offline_access Mail.Read Mail.Send",
+
+            "outlook_calendar":
+                "openid email offline_access Calendars.ReadWrite",
+
+            "teams":
+                "openid email offline_access User.Read Chat.ReadWrite"
+        }[pid]
 
         query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
             "response_type": "code",
             "response_mode": "query",
-            "scope": (
-                "openid email offline_access "
-                "Mail.Read Mail.Send"
-            ),
-            "state": state,
+            "scope": scopes,
+            "state": state
         }
 
         return (
             "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"
             + urlencode(query),
-            state,
+            state
         )
 
-    if pid == "outlook_calendar":
-        client_id = env("MICROSOFT_CLIENT_ID")
-        redirect = env(
-            "MICROSOFT_CALENDAR_REDIRECT_URI",
-            "MICROSOFT_REDIRECT_URI",
-        )
-
-        if not client_id or not redirect:
-            raise ValueError(
-                "Microsoft OAuth is not configured on the SignalOS server."
-            )
-
-        query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
-            "response_type": "code",
-            "response_mode": "query",
-            "scope": (
-                "openid email offline_access "
-                "Calendars.ReadWrite"
-            ),
-            "state": state,
-        }
-
-        return (
-            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"
-            + urlencode(query),
-            state,
-        )
+    # ------------------------------------------------------------
+    # CALENDLY
+    # ------------------------------------------------------------
 
     if pid == "calendly":
-        client_id = env("CALENDLY_CLIENT_ID")
-        redirect = env("CALENDLY_REDIRECT_URI")
-
-        if not client_id or not redirect:
-            raise ValueError(
-                "Calendly OAuth is not configured on the SignalOS server."
-            )
 
         query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
             "response_type": "code",
-            "state": state,
+            "state": state
         }
 
         return (
             "https://auth.calendly.com/oauth/authorize?"
             + urlencode(query),
-            state,
+            state
         )
+
+    # ------------------------------------------------------------
+    # HUBSPOT
+    # ------------------------------------------------------------
 
     if pid == "hubspot":
-        client_id = env("HUBSPOT_CLIENT_ID")
-        redirect = env("HUBSPOT_REDIRECT_URI")
-
-        if not client_id or not redirect:
-            raise ValueError(
-                "HubSpot OAuth is not configured on the SignalOS server."
-            )
-
-        scope = (
-            "crm.objects.contacts.read "
-            "crm.objects.contacts.write "
-            "crm.objects.companies.read "
-            "crm.objects.companies.write"
-        )
 
         query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
-            "scope": scope,
-            "state": state,
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
+            "scope":
+                "crm.objects.contacts.read "
+                "crm.objects.contacts.write "
+                "crm.objects.companies.read "
+                "crm.objects.companies.write",
+            "state": state
         }
 
         return (
             "https://app.hubspot.com/oauth/authorize?"
             + urlencode(query),
-            state,
+            state
         )
 
+    # ------------------------------------------------------------
+    # SALESFORCE
+    # ------------------------------------------------------------
+
     if pid == "salesforce":
-        client_id = env("SALESFORCE_CLIENT_ID")
-        redirect = env("SALESFORCE_REDIRECT_URI")
-
-        if not client_id or not redirect:
-            raise ValueError(
-                "Salesforce OAuth is not configured on the SignalOS server."
-            )
-
-        url = env("SALESFORCE_AUTH_URL")
-
-        if url:
-            return url, state
 
         query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
             "response_type": "code",
-            "state": state,
+            "state": state
         }
 
         return (
             "https://login.salesforce.com/services/oauth2/authorize?"
             + urlencode(query),
-            state,
+            state
         )
 
-    if pid == "slack":
-        client_id = env("SLACK_CLIENT_ID")
-        redirect = env("SLACK_REDIRECT_URI")
+    # ------------------------------------------------------------
+    # SLACK
+    # ------------------------------------------------------------
 
-        if not client_id or not redirect:
-            raise ValueError(
-                "Slack OAuth is not configured on the SignalOS server."
-            )
+    if pid == "slack":
 
         query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
             "scope": "chat:write,channels:read",
-            "state": state,
+            "state": state
         }
 
         return (
             "https://slack.com/oauth/v2/authorize?"
             + urlencode(query),
-            state,
+            state
         )
+
+    # ------------------------------------------------------------
+    # WHATSAPP
+    # ------------------------------------------------------------
 
     if pid == "whatsapp":
-        client_id = env(
-            "META_CLIENT_ID",
-            "META_APP_ID",
-        )
-
-        redirect = env("META_REDIRECT_URI")
-
-        if not client_id or not redirect:
-            raise ValueError(
-                "Meta/WhatsApp OAuth is not configured on the SignalOS server."
-            )
 
         query = {
-            "client_id": client_id,
-            "redirect_uri": redirect,
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
             "response_type": "code",
-            "state": state,
+            "state": state
         }
 
         return (
             "https://www.facebook.com/v23.0/dialog/oauth?"
             + urlencode(query),
-            state,
+            state
         )
 
-    if pid in (
-        "teams",
-        "google_drive",
-        "zoho",
-    ):
-        raise ValueError(
-            f'{provider["name"]} is listed and ready for provider OAuth credentials, '
-            "but its OAuth adapter is not enabled in this deployment."
+    # ------------------------------------------------------------
+    # ZOHO
+    # ------------------------------------------------------------
+
+    if pid == "zoho":
+
+        query = {
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
+            "response_type": "code",
+            "access_type": "offline",
+            "scope":
+                "ZohoCRM.modules.ALL,ZohoCRM.settings.ALL",
+            "state": state
+        }
+
+        return (
+            "https://accounts.zoho.com/oauth/v2/auth?"
+            + urlencode(query),
+            state
         )
 
     raise ValueError(
-        f'{provider["name"]} is not configured for OAuth in this deployment.'
+        f"{provider['name']} OAuth adapter is not enabled."
     )
