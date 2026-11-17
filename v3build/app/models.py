@@ -1,144 +1,483 @@
-from datetime import datetime, timezone
-from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON
-from sqlalchemy.orm import Mapped, mapped_column
-from .db import Base
+from __future__ import annotations
 
-def now():
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
+
+from database import Base
+
+
+def utcnow():
     return datetime.now(timezone.utc)
 
-class User(Base):
-    __tablename__ = "users"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
-    name: Mapped[str | None] = mapped_column(String(200))
 
 class Workspace(Base):
-    __tablename__ = "workspaces"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(200))
-    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    __tablename__ = "signalos_workspaces"
 
-class ICP(Base):
-    __tablename__ = "icps"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    name: Mapped[str] = mapped_column(String(200))
-    countries: Mapped[list] = mapped_column(JSON, default=list)
-    industries: Mapped[list] = mapped_column(JSON, default=list)
-    company_sizes: Mapped[list] = mapped_column(JSON, default=list)
-    job_titles: Mapped[list] = mapped_column(JSON, default=list)
-    technologies: Mapped[list] = mapped_column(JSON, default=list)
-    keywords: Mapped[list] = mapped_column(JSON, default=list)
+    id = Column(Integer, primary_key=True)
 
-class IntentProfile(Base):
-    __tablename__ = "intent_profiles"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    name: Mapped[str] = mapped_column(String(200))
-    signals: Mapped[list] = mapped_column(JSON, default=list)
-    weights: Mapped[dict] = mapped_column(JSON, default=dict)
-    minimum_score: Mapped[float] = mapped_column(Float, default=60)
+    name = Column(
+        String(160),
+        nullable=False,
+        default="SignalOS Workspace",
+    )
+
+    owner_name = Column(
+        String(160),
+        default="Workspace Owner",
+    )
+
+    owner_email = Column(
+        String(255),
+        default="",
+    )
+
+    settings = Column(
+        JSON,
+        default=dict,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
 
 class Company(Base):
-    __tablename__ = "companies"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    name: Mapped[str] = mapped_column(String(300))
-    domain: Mapped[str | None] = mapped_column(String(500), index=True)
-    country: Mapped[str | None] = mapped_column(String(100))
-    industry: Mapped[str | None] = mapped_column(String(200))
-    employee_count: Mapped[int | None] = mapped_column(Integer)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    __tablename__ = "signalos_companies"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
+
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    name = Column(
+        String(255),
+        nullable=False,
+    )
+
+    domain = Column(
+        String(255),
+        default="",
+    )
+
+    industry = Column(
+        String(160),
+        default="",
+    )
+
+    country = Column(
+        String(120),
+        default="",
+    )
+
+    size = Column(
+        String(80),
+        default="",
+    )
+
+    website = Column(
+        String(500),
+        default="",
+    )
+
+    metadata_json = Column(
+        JSON,
+        default=dict,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
 
 class Prospect(Base):
-    __tablename__ = "prospects"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
-    full_name: Mapped[str | None] = mapped_column(String(300))
-    title: Mapped[str | None] = mapped_column(String(300))
-    email: Mapped[str | None] = mapped_column(String(320), index=True)
-    phone: Mapped[str | None] = mapped_column(String(80))
-    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    fit_score: Mapped[float] = mapped_column(Float, default=0)
-    intent_score: Mapped[float] = mapped_column(Float, default=0)
-    total_score: Mapped[float] = mapped_column(Float, default=0)
-    status: Mapped[str] = mapped_column(String(50), default="NEW")
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __tablename__ = "signalos_prospects"
 
-class Evidence(Base):
-    __tablename__ = "evidence"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    prospect_id: Mapped[int | None] = mapped_column(ForeignKey("prospects.id"))
-    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
-    signal_type: Mapped[str] = mapped_column(String(100))
-    source_url: Mapped[str | None] = mapped_column(String(1000))
-    summary: Mapped[str] = mapped_column(Text)
-    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
+
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    company_id = Column(
+        Integer,
+        ForeignKey("signalos_companies.id"),
+        nullable=True,
+    )
+
+    name = Column(
+        String(255),
+        nullable=False,
+    )
+
+    email = Column(
+        String(255),
+        default="",
+    )
+
+    title = Column(
+        String(160),
+        default="",
+    )
+
+    country = Column(
+        String(120),
+        default="",
+    )
+
+    score = Column(
+        Integer,
+        default=0,
+    )
+
+    status = Column(
+        String(60),
+        default="NEW",
+    )
+
+    intent = Column(
+        String(255),
+        default="",
+    )
+
+    evidence = Column(
+        Text,
+        default="",
+    )
+
+    source = Column(
+        String(255),
+        default="",
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
 
 class Campaign(Base):
-    __tablename__ = "campaigns"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    name: Mapped[str] = mapped_column(String(200))
-    status: Mapped[str] = mapped_column(String(40), default="DRAFT")
-    channel: Mapped[str] = mapped_column(String(40), default="email")
-    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    __tablename__ = "signalos_campaigns"
 
-class Interaction(Base):
-    __tablename__ = "interactions"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    prospect_id: Mapped[int] = mapped_column(ForeignKey("prospects.id"))
-    campaign_id: Mapped[int | None] = mapped_column(ForeignKey("campaigns.id"))
-    channel: Mapped[str] = mapped_column(String(40))
-    direction: Mapped[str] = mapped_column(String(20))
-    event_type: Mapped[str] = mapped_column(String(80))
-    content: Mapped[str | None] = mapped_column(Text)
-    provider_message_id: Mapped[str | None] = mapped_column(String(300))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
 
-class Suppression(Base):
-    __tablename__ = "suppressions"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    email: Mapped[str | None] = mapped_column(String(320), index=True)
-    phone: Mapped[str | None] = mapped_column(String(80), index=True)
-    reason: Mapped[str] = mapped_column(String(200))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    name = Column(
+        String(255),
+        nullable=False,
+    )
+
+    status = Column(
+        String(40),
+        default="DRAFT",
+    )
+
+    countries = Column(
+        Text,
+        default="",
+    )
+
+    industries = Column(
+        Text,
+        default="",
+    )
+
+    decision_makers = Column(
+        Text,
+        default="",
+    )
+
+    signals = Column(
+        Text,
+        default="",
+    )
+
+    channel = Column(
+        String(80),
+        default="Email",
+    )
+
+    booking_link = Column(
+        String(500),
+        default="",
+    )
+
+    daily_limit = Column(
+        Integer,
+        default=25,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
 
 class Connector(Base):
-    __tablename__ = "connectors"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(80))
-    provider: Mapped[str] = mapped_column(String(80))
-    status: Mapped[str] = mapped_column(String(40), default="DISCONNECTED")
-    config: Mapped[dict] = mapped_column(JSON, default=dict)
-    scopes: Mapped[list] = mapped_column(JSON, default=list)
-    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    __tablename__ = "signalos_connectors"
 
-class Job(Base):
-    __tablename__ = "jobs"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    type: Mapped[str] = mapped_column(String(100))
-    status: Mapped[str] = mapped_column(String(40), default="QUEUED")
-    payload: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "provider",
+            "name",
+            name="uq_signalos_connector",
+        ),
+    )
 
-class AuditEvent(Base):
-    __tablename__ = "audit_events"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    actor: Mapped[str] = mapped_column(String(100))
-    action: Mapped[str] = mapped_column(String(200))
-    entity_type: Mapped[str | None] = mapped_column(String(100))
-    entity_id: Mapped[str | None] = mapped_column(String(100))
-    detail: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
+
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    provider = Column(
+        String(100),
+        nullable=False,
+    )
+
+    name = Column(
+        String(255),
+        default="",
+    )
+
+    status = Column(
+        String(40),
+        default="AVAILABLE",
+    )
+
+    enabled = Column(
+        Boolean,
+        default=True,
+    )
+
+    auth_type = Column(
+        String(40),
+        default="api_key",
+    )
+
+    config = Column(
+        JSON,
+        default=dict,
+    )
+
+    connected_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
+class Activity(Base):
+    __tablename__ = "signalos_activity"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
+
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    kind = Column(
+        String(80),
+        default="system",
+    )
+
+    title = Column(
+        String(255),
+        nullable=False,
+    )
+
+    detail = Column(
+        Text,
+        default="",
+    )
+
+    severity = Column(
+        String(30),
+        default="info",
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+
+class Notification(Base):
+    __tablename__ = "signalos_notifications"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
+
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    type = Column(
+        String(80),
+        default="system",
+    )
+
+    title = Column(
+        String(255),
+        nullable=False,
+    )
+
+    body = Column(
+        Text,
+        default="",
+    )
+
+    read = Column(
+        Boolean,
+        default=False,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+
+class Suppression(Base):
+    __tablename__ = "signalos_suppressions"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
+
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    value = Column(
+        String(255),
+        nullable=False,
+    )
+
+    reason = Column(
+        String(255),
+        default="",
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+
+class Setting(Base):
+    __tablename__ = "signalos_settings"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+    )
+
+    workspace_id = Column(
+        Integer,
+        ForeignKey("signalos_workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+
+    key = Column(
+        String(120),
+        nullable=False,
+    )
+
+    value = Column(
+        JSON,
+        default=dict,
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "key",
+            name="uq_signalos_setting",
+        ),
+    )
