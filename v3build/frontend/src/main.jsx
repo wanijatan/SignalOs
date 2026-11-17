@@ -1,2524 +1,3872 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
+import React,{useEffect,useMemo,useState} from 'react';
+import {createRoot} from 'react-dom/client';
 import {
-  Activity,
-  AlertCircle,
-  ArrowRight,
-  Bell,
-  Bot,
-  CalendarDays,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  CircleHelp,
-  Clock3,
-  Cloud,
-  Code2,
-  Database,
-  FileText,
-  Filter,
-  Globe2,
-  HelpCircle,
-  LayoutDashboard,
-  Lightbulb,
-  Link2,
-  Loader2,
-  Mail,
-  Menu,
-  MessageSquare,
-  MoreHorizontal,
-  Pause,
-  Play,
-  Plus,
-  RefreshCw,
-  Rocket,
-  Search,
-  Settings,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-  Target,
-  Trash2,
-  UserRound,
-  Users,
-  X,
-  Zap
-} from "lucide-react";
-import "./styles.css";
+Activity,ArrowRight,BarChart3,Bell,BookOpen,Building2,Calendar,Check,
+ChevronDown,ChevronRight,CircleHelp,Command,ExternalLink,FileText,Gauge,
+Link2,Loader2,Mail,Menu,MessageSquare,MoreHorizontal,Pause,Play,Plus,
+Search,Send,Settings,ShieldCheck,Sparkles,Target,Trash2,Users,X,Zap
+} from 'lucide-react';
+import './styles.css';
 
-const API = (
-  import.meta.env.VITE_API_URL ||
-  "https://signalos-api-15va.onrender.com"
-).replace(/\/$/, "");
+const API=(import.meta.env.VITE_API_URL||'https://signalos-api-15va.onrender.com').replace(/\/$/,'');
+const WS=1;
 
-const WS = 1;
-
-/* ---------------------------------------------------------
-   COMPLETE PROVIDER CATALOG
---------------------------------------------------------- */
-
-const PROVIDERS = [
-  // EMAIL
-  {
-    id: "gmail",
-    name: "Gmail / Google Workspace",
-    category: "Email",
-    description: "Send and read email from a Google mailbox.",
-    permissions: ["Send email", "Read replies", "Delivery events"],
-    color: "#EA4335",
-    icon: "gmail",
-    mode: "oauth"
-  },
-  {
-    id: "outlook",
-    name: "Microsoft 365 / Outlook",
-    category: "Email",
-    description: "Connect Outlook and Microsoft 365 mailboxes.",
-    permissions: ["Send email", "Read replies", "Mailbox access"],
-    color: "#0078D4",
-    icon: "outlook",
-    mode: "oauth"
-  },
-  {
-    id: "resend",
-    name: "Resend",
-    category: "Email",
-    description: "Transactional and outbound email infrastructure.",
-    permissions: ["Send email", "Delivery events", "Bounce events"],
-    color: "#111111",
-    icon: "resend",
-    mode: "api"
-  },
-  {
-    id: "sendgrid",
-    name: "SendGrid",
-    category: "Email",
-    description: "Reliable email delivery and event tracking.",
-    permissions: ["Send email", "Delivery events", "Bounce events"],
-    color: "#1A82E2",
-    icon: "sendgrid",
-    mode: "api"
-  },
-  {
-    id: "mailgun",
-    name: "Mailgun",
-    category: "Email",
-    description: "Email API and deliverability infrastructure.",
-    permissions: ["Send email", "Delivery events", "Bounce events"],
-    color: "#E85D75",
-    icon: "mailgun",
-    mode: "api"
-  },
-  {
-    id: "smtp",
-    name: "Custom SMTP",
-    category: "Email",
-    description: "Connect any SMTP-compatible mailbox.",
-    permissions: ["Send email", "SMTP authentication"],
-    color: "#111111",
-    icon: "smtp",
-    mode: "api"
-  },
-
-  // CALENDAR
-  {
-    id: "calendly",
-    name: "Calendly",
-    category: "Calendar",
-    description: "Detect meetings, cancellations and reschedules.",
-    permissions: ["Read events", "Meeting status", "Webhooks"],
-    color: "#006BFF",
-    icon: "calendly",
-    mode: "oauth"
-  },
-  {
-    id: "google_calendar",
-    name: "Google Calendar",
-    category: "Calendar",
-    description: "Connect Google Calendar for meeting intelligence.",
-    permissions: ["Read calendar", "Create events", "Event updates"],
-    color: "#4285F4",
-    icon: "google",
-    mode: "oauth"
-  },
-  {
-    id: "outlook_calendar",
-    name: "Outlook Calendar",
-    category: "Calendar",
-    description: "Connect Microsoft calendars.",
-    permissions: ["Read calendar", "Create events", "Event updates"],
-    color: "#0078D4",
-    icon: "outlook",
-    mode: "oauth"
-  },
-  {
-    id: "cal_com",
-    name: "Cal.com",
-    category: "Calendar",
-    description: "Open scheduling infrastructure.",
-    permissions: ["Read events", "Booking events"],
-    color: "#111111",
-    icon: "calendar",
-    mode: "oauth"
-  },
-
-  // CRM
-  {
-    id: "hubspot",
-    name: "HubSpot",
-    category: "CRM",
-    description: "Sync prospects, lifecycle stages and activities.",
-    permissions: ["Read contacts", "Create contacts", "Activities"],
-    color: "#FF7A59",
-    icon: "hubspot",
-    mode: "oauth"
-  },
-  {
-    id: "salesforce",
-    name: "Salesforce",
-    category: "CRM",
-    description: "Enterprise CRM and opportunity synchronization.",
-    permissions: ["Read leads", "Create leads", "Activities"],
-    color: "#00A1E0",
-    icon: "salesforce",
-    mode: "oauth"
-  },
-  {
-    id: "pipedrive",
-    name: "Pipedrive",
-    category: "CRM",
-    description: "Sync people, organizations and deals.",
-    permissions: ["Read contacts", "Create contacts", "Deals"],
-    color: "#017737",
-    icon: "pipedrive",
-    mode: "oauth"
-  },
-  {
-    id: "zoho_crm",
-    name: "Zoho CRM",
-    category: "CRM",
-    description: "Connect your Zoho sales workspace.",
-    permissions: ["Read contacts", "Create contacts", "Activities"],
-    color: "#E42527",
-    icon: "zoho",
-    mode: "oauth"
-  },
-  {
-    id: "freshsales",
-    name: "Freshsales",
-    category: "CRM",
-    description: "Sync prospects and sales activities.",
-    permissions: ["Read contacts", "Create contacts", "Activities"],
-    color: "#00A886",
-    icon: "fresh",
-    mode: "api"
-  },
-
-  // AI / LLM
-  {
-    id: "openai",
-    name: "OpenAI",
-    category: "AI / LLM",
-    description: "Use OpenAI models for research, scoring and personalization.",
-    permissions: ["Model access", "Text generation", "Structured outputs"],
-    color: "#111111",
-    icon: "openai",
-    mode: "api"
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic / Claude",
-    category: "AI / LLM",
-    description: "Use Claude for research, reasoning and outbound intelligence.",
-    permissions: ["Model access", "Text generation", "Reasoning"],
-    color: "#D97757",
-    icon: "claude",
-    mode: "api"
-  },
-  {
-    id: "gemini",
-    name: "Google Gemini",
-    category: "AI / LLM",
-    description: "Use Gemini models for prospect research and generation.",
-    permissions: ["Model access", "Text generation", "Multimodal"],
-    color: "#4285F4",
-    icon: "gemini",
-    mode: "api"
-  },
-  {
-    id: "openrouter",
-    name: "OpenRouter",
-    category: "AI / LLM",
-    description: "Access multiple AI models through one API.",
-    permissions: ["Model routing", "Text generation", "Model selection"],
-    color: "#111111",
-    icon: "openrouter",
-    mode: "api"
-  },
-  {
-    id: "custom_ai",
-    name: "Custom OpenAI-Compatible API",
-    category: "AI / LLM",
-    description: "Connect your own compatible AI endpoint.",
-    permissions: ["Endpoint access", "Model access"],
-    color: "#111111",
-    icon: "code",
-    mode: "api"
-  },
-
-  // DATA
-  {
-    id: "apollo",
-    name: "Apollo",
-    category: "Data & Enrichment",
-    description: "Discover companies, contacts and sales intelligence.",
-    permissions: ["Search contacts", "Company data", "Enrichment"],
-    color: "#111111",
-    icon: "apollo",
-    mode: "api"
-  },
-  {
-    id: "hunter",
-    name: "Hunter",
-    category: "Data & Enrichment",
-    description: "Find and verify professional email addresses.",
-    permissions: ["Email discovery", "Email verification"],
-    color: "#FF6B35",
-    icon: "hunter",
-    mode: "api"
-  },
-  {
-    id: "people_data_labs",
-    name: "People Data Labs",
-    category: "Data & Enrichment",
-    description: "People and company enrichment infrastructure.",
-    permissions: ["People data", "Company data", "Enrichment"],
-    color: "#111111",
-    icon: "pdl",
-    mode: "api"
-  },
-  {
-    id: "crunchbase",
-    name: "Crunchbase",
-    category: "Data & Enrichment",
-    description: "Funding, company and investor intelligence.",
-    permissions: ["Company data", "Funding data"],
-    color: "#0284C7",
-    icon: "crunchbase",
-    mode: "api"
-  },
-
-  // VOICE
-  {
-    id: "twilio",
-    name: "Twilio",
-    category: "Voice & Messaging",
-    description: "Voice, SMS and communication infrastructure.",
-    permissions: ["Calls", "SMS", "Call status"],
-    color: "#F22F46",
-    icon: "twilio",
-    mode: "api"
-  },
-  {
-    id: "exotel",
-    name: "Exotel",
-    category: "Voice & Messaging",
-    description: "India-focused voice and telephony infrastructure.",
-    permissions: ["Calls", "Call status", "Recordings"],
-    color: "#F59E0B",
-    icon: "phone",
-    mode: "api"
-  },
-  {
-    id: "telnyx",
-    name: "Telnyx",
-    category: "Voice & Messaging",
-    description: "Programmable voice and messaging.",
-    permissions: ["Calls", "Messaging"],
-    color: "#111111",
-    icon: "phone",
-    mode: "api"
-  },
-  {
-    id: "plivo",
-    name: "Plivo",
-    category: "Voice & Messaging",
-    description: "Programmable communications infrastructure.",
-    permissions: ["Calls", "SMS"],
-    color: "#111111",
-    icon: "phone",
-    mode: "api"
-  },
-  {
-    id: "vonage",
-    name: "Vonage",
-    category: "Voice & Messaging",
-    description: "Communications APIs for voice and messaging.",
-    permissions: ["Calls", "Messaging"],
-    color: "#DA291C",
-    icon: "phone",
-    mode: "api"
-  },
-  {
-    id: "whatsapp",
-    name: "WhatsApp Business",
-    category: "Voice & Messaging",
-    description: "Connect WhatsApp Business messaging.",
-    permissions: ["Send messages", "Receive messages", "Webhooks"],
-    color: "#25D366",
-    icon: "whatsapp",
-    mode: "oauth"
-  },
-
-  // STORAGE
-  {
-    id: "google_drive",
-    name: "Google Drive",
-    category: "Storage",
-    description: "Store and access campaign files.",
-    permissions: ["Read files", "Create files"],
-    color: "#4285F4",
-    icon: "drive",
-    mode: "oauth"
-  },
-  {
-    id: "dropbox",
-    name: "Dropbox",
-    category: "Storage",
-    description: "Connect Dropbox for campaign assets.",
-    permissions: ["Read files", "Create files"],
-    color: "#0061FF",
-    icon: "dropbox",
-    mode: "oauth"
-  },
-  {
-    id: "onedrive",
-    name: "OneDrive",
-    category: "Storage",
-    description: "Microsoft cloud file storage.",
-    permissions: ["Read files", "Create files"],
-    color: "#0078D4",
-    icon: "drive",
-    mode: "oauth"
-  },
-
-  // NOTIFICATIONS
-  {
-    id: "slack",
-    name: "Slack",
-    category: "Notifications",
-    description: "Receive prospect and campaign notifications.",
-    permissions: ["Send notifications", "Channel messages"],
-    color: "#4A154B",
-    icon: "slack",
-    mode: "oauth"
-  },
-  {
-    id: "teams",
-    name: "Microsoft Teams",
-    category: "Notifications",
-    description: "Send SignalOS notifications to Teams.",
-    permissions: ["Send notifications", "Channel messages"],
-    color: "#6264A7",
-    icon: "teams",
-    mode: "oauth"
-  },
-  {
-    id: "webhook",
-    name: "Custom Webhook",
-    category: "Notifications",
-    description: "Send SignalOS events to any webhook.",
-    permissions: ["Outbound events"],
-    color: "#111111",
-    icon: "webhook",
-    mode: "api"
+const api=async(path,opt={})=>{
+ const r=await fetch(`${API}${path}`,{
+  ...opt,
+  headers:{
+   'Content-Type':'application/json',
+   ...(opt.headers||{})
   }
+ });
+ const t=await r.text();
+ let d={};
+ try{d=t?JSON.parse(t):{}}catch{d={detail:t}}
+ if(!r.ok)throw new Error(d.detail||d.message||`${r.status} ${r.statusText}`);
+ return d;
+};
+
+const groups=[
+ {title:'Workspace',items:[
+  ['overview','Overview',Gauge],
+  ['prospects','Prospects',Users],
+  ['companies','Companies',Building2],
+  ['signals','Intent signals',Target]
+ ]},
+ {title:'Outbound',items:[
+  ['campaigns','Campaigns',Send],
+  ['conversations','Conversations',MessageSquare],
+  ['meetings','Meetings',Calendar]
+ ]},
+ {title:'Intelligence',items:[
+  ['activity','AI activity',Activity],
+  ['analytics','Analytics',BarChart3]
+ ]},
+ {title:'System',items:[
+  ['integrations','Integrations',Link2],
+  ['automation','Automation',Zap],
+  ['notifications','Notifications',Bell],
+  ['settings','Settings',Settings],
+  ['help','Help & docs',CircleHelp]
+ ]}
 ];
 
-const CATEGORIES = [
-  "All",
-  "Email",
-  "Calendar",
-  "CRM",
-  "AI / LLM",
-  "Data & Enrichment",
-  "Voice & Messaging",
-  "Storage",
-  "Notifications"
+const cats=[
+ 'All',
+ 'Email',
+ 'Calendar',
+ 'CRM',
+ 'AI / LLM',
+ 'Data & Enrichment',
+ 'Voice & Messaging',
+ 'Storage',
+ 'Notifications'
 ];
 
-/* ---------------------------------------------------------
-   HELPERS
---------------------------------------------------------- */
+const blankCampaign={
+ name:'',
+ countries:'India',
+ industries:'SaaS, Technology',
+ decision_makers:'Founder, CEO, Head of Marketing',
+ signals:'Funding, hiring, expansion, website changes',
+ channel:'Email',
+ booking_link:'',
+ daily_limit:25
+};
 
-async function api(path, options = {}) {
-  const response = await fetch(`${API}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    },
-    ...options
-  });
+function App(){
 
-  const text = await response.text();
+ const [page,setPage]=useState('overview');
+ const [mobile,setMobile]=useState(false);
+ const [health,setHealth]=useState('checking');
+ const [toast,setToast]=useState(null);
+ const [loading,setLoading]=useState(false);
 
-  let data = null;
+ const [onboarding,setOnboarding]=useState(null);
+ const [showTour,setShowTour]=useState(false);
+ const [tourStep,setTourStep]=useState(0);
 
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
+ const [stats,setStats]=useState({});
+ const [prospects,setProspects]=useState([]);
+ const [companies,setCompanies]=useState([]);
+ const [campaigns,setCampaigns]=useState([]);
+ const [connectors,setConnectors]=useState([]);
+ const [notifications,setNotifications]=useState([]);
+ const [activity,setActivity]=useState([]);
 
-  if (!response.ok) {
-    const message =
-      typeof data === "string"
-        ? data
-        : data?.detail || data?.message || `Request failed (${response.status})`;
+ const [campaignModal,setCampaignModal]=useState(false);
+ const [selectedCampaign,setSelectedCampaign]=useState(null);
+ const [campaign,setCampaign]=useState(blankCampaign);
 
-    throw new Error(message);
-  }
+ const [integrationModal,setIntegrationModal]=useState(null);
+ const [integrationSearch,setIntegrationSearch]=useState('');
+ const [integrationCategory,setIntegrationCategory]=useState('All');
 
-  return data;
-}
-
-function safeArray(value) {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.results)) return value.results;
-  return [];
-}
-
-function getAutomation(data) {
-  return (
-    data?.automation ||
-    data?.workspace?.automation ||
-    data?.settings?.automation ||
-    {
-      automation_enabled:
-        data?.workspace?.settings?.automation_enabled ?? true,
-      ai_mode: data?.workspace?.settings?.ai_mode || "copilot"
-    }
+ const notify=(message,type='success')=>{
+  setToast({message,type});
+  window.clearTimeout(window.__sigtoast);
+  window.__sigtoast=window.setTimeout(
+   ()=>setToast(null),
+   3500
   );
-}
+ };
 
-function providerState(provider, connected) {
-  const found = connected.find(
-    (item) =>
-      item?.provider_id === provider.id ||
-      item?.id === provider.id ||
-      item?.provider === provider.id
-  );
+ const loadOnboarding=async()=>{
+  const o=await api(`/workspaces/${WS}/onboarding`);
+  setOnboarding(o);
+  return o;
+ };
 
-  if (!found) {
-    return {
-      ...provider,
-      connected: false,
-      enabled: false,
-      status: "available",
-      config: {}
-    };
-  }
+ const loadAll=async(silent=false)=>{
 
-  return {
-    ...provider,
-    ...found,
-    connected: true,
-    enabled: found.enabled !== false,
-    status: found.status || "connected"
-  };
-}
+  if(!silent)setLoading(true);
 
-/* ---------------------------------------------------------
-   PROVIDER ICON
---------------------------------------------------------- */
+  try{
 
-function ProviderIcon({ provider, size = 34 }) {
-  const letters = {
-    gmail: "M",
-    outlook: "O",
-    resend: "R",
-    sendgrid: "S",
-    mailgun: "M",
-    smtp: "@",
-    calendly: "C",
-    google: "G",
-    calendar: "C",
-    hubspot: "H",
-    salesforce: "S",
-    pipedrive: "P",
-    zoho: "Z",
-    fresh: "F",
-    openai: "AI",
-    claude: "C",
-    gemini: "G",
-    openrouter: "OR",
-    code: "</>",
-    apollo: "A",
-    hunter: "H",
-    pdl: "P",
-    crunchbase: "CB",
-    twilio: "T",
-    phone: "☎",
-    whatsapp: "WA",
-    drive: "D",
-    dropbox: "D",
-    slack: "S",
-    teams: "T",
-    webhook: "↗"
-  };
+   const h=await api('/health');
 
-  return (
-    <div
-      className="provider-icon"
-      style={{
-        width: size,
-        height: size,
-        color: provider.color || "#111"
-      }}
-    >
-      {letters[provider.icon] || provider.name?.slice(0, 2).toUpperCase()}
-    </div>
-  );
-}
+   setHealth(
+    h.ok
+    ?'online'
+    :'offline'
+   );
 
-/* ---------------------------------------------------------
-   APP
---------------------------------------------------------- */
+   const o=await loadOnboarding();
 
-function App() {
-  const [page, setPage] = useState("Overview");
-  const [mobileNav, setMobileNav] = useState(false);
-
-  const [online, setOnline] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const [workspace, setWorkspace] = useState(null);
-  const [dashboard, setDashboard] = useState({});
-  const [automation, setAutomation] = useState({
-    automation_enabled: true,
-    ai_mode: "copilot"
-  });
-
-  const [prospects, setProspects] = useState([]);
-  const [campaigns, setCampaigns] = useState([]);
-  const [connectors, setConnectors] = useState([]);
-
-  const [toast, setToast] = useState(null);
-  const [modal, setModal] = useState(null);
-
-  /* ---------------------------------------------------------
-     INITIAL LOAD
-  --------------------------------------------------------- */
-
-  async function loadAll() {
-    setLoading(true);
-
-    try {
-      const health = await api("/health");
-      setOnline(Boolean(health?.ok ?? true));
-    } catch {
-      setOnline(false);
-    }
-
-    try {
-      const ws = await api(`/workspaces/${WS}`);
-      setWorkspace(ws);
-      setAutomation(getAutomation(ws));
-    } catch {
-      // workspace endpoint can fail while other endpoints work
-    }
-
-    try {
-      const dash = await api(`/workspaces/${WS}/dashboard`);
-      setDashboard(dash || {});
-      const a = getAutomation(dash);
-      setAutomation((old) => ({ ...old, ...a }));
-    } catch {
-      setDashboard({});
-    }
-
-    try {
-      const p = await api(`/workspaces/${WS}/prospects`);
-      setProspects(safeArray(p));
-    } catch {
-      setProspects([]);
-    }
-
-    try {
-      const c = await api(`/workspaces/${WS}/campaigns`);
-      setCampaigns(safeArray(c));
-    } catch {
-      setCampaigns([]);
-    }
-
-    try {
-      const integrations = await api(`/workspaces/${WS}/connectors`);
-      setConnectors(safeArray(integrations));
-    } catch {
-      setConnectors([]);
-    }
-
+   if(!o.completed){
     setLoading(false);
+    return;
+   }
+
+   const [
+    d,
+    p,
+    c,
+    ca,
+    n,
+    a
+   ]=await Promise.all([
+    api(`/workspaces/${WS}/dashboard`),
+    api(`/workspaces/${WS}/prospects`),
+    api(`/workspaces/${WS}/companies`),
+    api(`/workspaces/${WS}/campaigns`),
+    api(`/workspaces/${WS}/notifications`),
+    api(`/workspaces/${WS}/activity`)
+   ]);
+
+   setStats(d.metrics||{});
+   setProspects(p.prospects||[]);
+   setCompanies(c.companies||[]);
+   setCampaigns(ca.campaigns||[]);
+   setNotifications(n.notifications||[]);
+   setActivity(a.activity||[]);
+
+  }catch(e){
+
+   setHealth('offline');
+
+   if(!silent){
+    notify(
+     `SignalOS API error: ${e.message}`,
+     'error'
+    );
+   }
+
+  }finally{
+
+   if(!silent)setLoading(false);
+
+  }
+ };
+
+ const loadConnectors=async()=>{
+
+  try{
+
+   const result=await api(
+    `/workspaces/${WS}/connectors`
+   );
+
+   setConnectors(
+    result.connectors||[]
+   );
+
+  }catch(e){
+
+   if(onboarding?.completed){
+    notify(
+     e.message,
+     'error'
+    );
+   }
+
+  }
+ };
+
+ useEffect(()=>{
+  loadAll();
+ },[]);
+
+ useEffect(()=>{
+
+  if(onboarding?.completed){
+   loadConnectors();
   }
 
-  useEffect(() => {
-    loadAll();
-  }, []);
+ },[onboarding?.completed]);
 
-  function notify(message, type = "success") {
-    setToast({ message, type });
-    window.setTimeout(() => setToast(null), 3500);
+ const navigate=p=>{
+  setPage(p);
+  setMobile(false);
+
+  if(p==='integrations'){
+   loadConnectors();
   }
 
-  /* ---------------------------------------------------------
-     NAVIGATION
-  --------------------------------------------------------- */
+  if(p==='notifications'){
+   loadAll(true);
+  }
+ };
 
-  const navigation = [
+ const createCampaign=async()=>{
+
+  if(!campaign.name.trim()){
+   return notify(
+    'Campaign name is required',
+    'error'
+   );
+  }
+
+  try{
+
+   await api(
+    `/workspaces/${WS}/campaigns`,
     {
-      label: "WORKSPACE",
-      items: [
-        ["Overview", LayoutDashboard],
-        ["Prospects", Users],
-        ["Companies", Globe2],
-        ["Intent Signals", Target]
-      ]
-    },
-    {
-      label: "OUTBOUND",
-      items: [
-        ["Campaigns", Rocket],
-        ["Conversations", MessageSquare],
-        ["Meetings", CalendarDays]
-      ]
-    },
-    {
-      label: "INTELLIGENCE",
-      items: [
-        ["AI Activity", Bot],
-        ["Analytics", Activity]
-      ]
-    },
-    {
-      label: "SYSTEM",
-      items: [
-        ["Integrations", Link2],
-        ["Automation", Zap],
-        ["Settings", Settings]
-      ]
+     method:'POST',
+     body:JSON.stringify(campaign)
     }
-  ];
+   );
 
-  function navigate(next) {
-    setPage(next);
-    setMobileNav(false);
+   notify(
+    'Campaign created'
+   );
+
+   setCampaign(blankCampaign);
+   setCampaignModal(false);
+   setPage('campaigns');
+
+   await loadAll(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
   }
+ };
 
-  /* ---------------------------------------------------------
-     AUTOMATION
-  --------------------------------------------------------- */
+ const campaignStatus=async(
+  id,
+  status
+ )=>{
 
-  async function updateAutomation(patch) {
-    const previous = automation;
+  try{
 
-    const next = {
-      ...previous,
-      ...patch
-    };
-
-    setAutomation(next);
-
-    try {
-      const result = await api(`/workspaces/${WS}/automation`, {
-        method: "PATCH",
-        body: JSON.stringify(patch)
-      });
-
-      setAutomation({
-        ...next,
-        ...getAutomation(result)
-      });
-
-      notify("Automation settings updated.");
-    } catch (error) {
-      setAutomation(previous);
-      notify(error.message, "error");
+   await api(
+    `/workspaces/${WS}/campaigns/${id}`,
+    {
+     method:'PATCH',
+     body:JSON.stringify({status})
     }
+   );
+
+   notify(
+    status==='ACTIVE'
+    ?'Campaign activated'
+    :'Campaign paused'
+   );
+
+   setSelectedCampaign(null);
+
+   await loadAll(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
   }
+ };
 
-  /* ---------------------------------------------------------
-     CONNECT PROVIDER
-  --------------------------------------------------------- */
+ const connect=async p=>{
 
-  async function connectProvider(provider) {
-    setModal({
-      type: "connect",
-      provider,
-      loading: true
+  try{
+
+   const result=await api(
+    `/workspaces/${WS}/connectors/${p.id}/connect`,
+    {
+     method:'POST',
+     body:'{}'
+    }
+   );
+
+   if(result.authorization_url){
+
+    window.location.href=
+     result.authorization_url;
+
+   }else{
+
+    setIntegrationModal({
+     ...p,
+     mode:'api'
     });
 
-    try {
-      const result = await api(
-        `/workspaces/${WS}/connectors/${provider.id}/connect`,
-        {
-          method: "POST"
-        }
-      );
+   }
 
-      if (result?.authorization_url) {
-        setModal(null);
-        window.location.href = result.authorization_url;
-        return;
-      }
+  }catch(e){
 
-      if (result?.url) {
-        setModal(null);
-        window.location.href = result.url;
-        return;
-      }
+   setIntegrationModal({
+    ...p,
+    error:e.message
+   });
 
-      if (result?.requires_configuration || provider.mode === "api") {
-        setModal({
-          type: "configure",
-          provider,
-          loading: false,
-          initial: result?.config || {}
-        });
-        return;
-      }
-
-      await loadAll();
-
-      setModal(null);
-      notify(`${provider.name} connected.`);
-    } catch (error) {
-      setModal(null);
-
-      notify(
-        `${provider.name}: ${error.message || "Connection could not be started."}`,
-        "error"
-      );
-    }
+   notify(
+    e.message,
+    'error'
+   );
   }
+ };
 
-  async function configureProvider(provider, config) {
-    try {
-      await api(
-        `/workspaces/${WS}/connectors/${provider.id}/configure`,
-        {
-          method: "POST",
-          body: JSON.stringify(config)
-        }
-      );
+ const configure=async(
+  p,
+  secret
+ )=>{
 
-      await loadAll();
-      setModal(null);
-      notify(`${provider.name} configured successfully.`);
-    } catch (error) {
-      notify(error.message, "error");
+  try{
+
+   await api(
+    `/workspaces/${WS}/connectors/${p.id}/configure`,
+    {
+     method:'POST',
+     body:JSON.stringify({
+      api_key:secret
+     })
     }
+   );
+
+   notify(
+    `${p.name} connected`
+   );
+
+   setIntegrationModal(null);
+
+   await loadConnectors();
+   await loadAll(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
   }
+ };
 
-  async function toggleProvider(provider, enabled) {
-    try {
-      await api(
-        `/workspaces/${WS}/connectors/${provider.id}/toggle`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ enabled })
-        }
-      );
+ const toggle=async(
+  p,
+  enabled
+ )=>{
 
-      await loadAll();
-      notify(
-        `${provider.name} ${enabled ? "enabled" : "disabled"}.`
-      );
-    } catch (error) {
-      notify(error.message, "error");
+  try{
+
+   await api(
+    `/workspaces/${WS}/connectors/${p.id}/toggle`,
+    {
+     method:'PATCH',
+     body:JSON.stringify({
+      enabled
+     })
     }
+   );
+
+   await loadConnectors();
+   await loadAll(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
   }
+ };
 
-  async function disconnectProvider(provider) {
-    try {
-      await api(
-        `/workspaces/${WS}/connectors/${provider.id}`,
-        {
-          method: "DELETE"
-        }
-      );
+ const disconnect=async p=>{
 
-      await loadAll();
-      notify(`${provider.name} disconnected.`);
-    } catch (error) {
-      notify(error.message, "error");
+  if(
+   !window.confirm(
+    `Disconnect ${p.name}?`
+   )
+  )return;
+
+  try{
+
+   await api(
+    `/workspaces/${WS}/connectors/${p.id}`,
+    {
+     method:'DELETE'
     }
+   );
+
+   notify(
+    `${p.name} disconnected`
+   );
+
+   setIntegrationModal(null);
+
+   await loadConnectors();
+   await loadAll(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
   }
+ };
 
-  /* ---------------------------------------------------------
-     CAMPAIGN
-  --------------------------------------------------------- */
+ const completeSetup=async payload=>{
 
-  async function createCampaign(payload) {
-    try {
-      await api(`/workspaces/${WS}/campaigns`, {
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
+  try{
 
-      await loadAll();
-
-      setModal(null);
-      navigate("Campaigns");
-      notify("Campaign created successfully.");
-    } catch (error) {
-      notify(error.message, "error");
+   const result=await api(
+    `/workspaces/${WS}/onboarding/complete`,
+    {
+     method:'POST',
+     body:JSON.stringify(payload)
     }
+   );
+
+   setOnboarding({
+    ...onboarding,
+    ...result,
+    completed:true
+   });
+
+   notify(
+    'Setup completed'
+   );
+
+   await loadAll(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
   }
+ };
 
-  async function updateCampaign(id, status) {
-    try {
-      await api(`/workspaces/${WS}/campaigns/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status })
-      });
+ const markRead=async()=>{
 
-      await loadAll();
-      notify(`Campaign ${status === "active" ? "activated" : "paused"}.`);
-    } catch (error) {
-      notify(error.message, "error");
+  try{
+
+   await api(
+    `/workspaces/${WS}/notifications/read`,
+    {
+     method:'POST',
+     body:JSON.stringify({
+      ids:notifications
+       .filter(x=>!x.read)
+       .map(x=>x.id)
+     })
     }
+   );
+
+   await loadAll(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
   }
+ };
 
-  /* ---------------------------------------------------------
-     CONNECTED PROVIDERS
-  --------------------------------------------------------- */
+ const filtered=useMemo(
+  ()=>connectors.filter(
+   p=>
+    (
+     integrationCategory==='All'
+     ||
+     p.category===integrationCategory
+    )
+    &&
+    `${p.name} ${p.vendor} ${p.description}`
+     .toLowerCase()
+     .includes(
+      integrationSearch.toLowerCase()
+     )
+  ),
+  [
+   connectors,
+   integrationCategory,
+   integrationSearch
+  ]
+ );
 
-  const providerCards = useMemo(
-    () => PROVIDERS.map((p) => providerState(p, connectors)),
-    [connectors]
-  );
-
-  const connectedCount = providerCards.filter(
-    (p) => p.connected && p.enabled !== false
+ const unread=
+  notifications.filter(
+   x=>!x.read
   ).length;
 
+ if(
+  onboarding
+  &&
+  !onboarding.completed
+ ){
+
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${mobileNav ? "mobile-open" : ""}`}>
-        <div className="brand">
-          <div className="brand-mark">S</div>
-          <div>
-            <div className="brand-name">SignalOS</div>
-            <div className="brand-subtitle">Revenue Intelligence</div>
-          </div>
-          <button
-            className="mobile-close"
-            onClick={() => setMobileNav(false)}
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="workspace-switcher">
-          <div className="workspace-avatar">A</div>
-          <div className="workspace-info">
-            <strong>{workspace?.name || "Acme Growth"}</strong>
-            <span>Workspace</span>
-          </div>
-          <ChevronDown size={16} />
-        </div>
-
-        <div className="sidebar-scroll">
-          {navigation.map((group) => (
-            <div className="nav-group" key={group.label}>
-              <div className="nav-label">{group.label}</div>
-
-              {group.items.map(([name, Icon]) => (
-                <button
-                  key={name}
-                  className={`nav-item ${
-                    page === name ? "active" : ""
-                  }`}
-                  onClick={() => navigate(name)}
-                >
-                  <Icon size={17} strokeWidth={1.8} />
-                  <span>{name}</span>
-
-                  {name === "Integrations" && connectedCount > 0 && (
-                    <span className="nav-count">{connectedCount}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        <div className="sidebar-bottom">
-          <button className="nav-item" onClick={() => navigate("Help")}>
-            <CircleHelp size={17} />
-            <span>Help & Support</span>
-          </button>
-
-          <div className="user-card">
-            <div className="user-avatar">
-              <UserRound size={16} />
-            </div>
-            <div>
-              <strong>Workspace Owner</strong>
-              <span>Administrator</span>
-            </div>
-            <MoreHorizontal size={16} />
-          </div>
-        </div>
-      </aside>
-
-      <main className="main">
-        <header className="topbar">
-          <button
-            className="mobile-menu"
-            onClick={() => setMobileNav(true)}
-          >
-            <Menu size={20} />
-          </button>
-
-          <div className="breadcrumb">
-            SignalOS
-            <ChevronRight size={14} />
-            <strong>{page}</strong>
-          </div>
-
-          <div className="top-actions">
-            <div className={`api-status ${online ? "online" : "offline"}`}>
-              <span />
-              {online ? "API online" : "API offline"}
-            </div>
-
-            <button
-              className="icon-button"
-              onClick={() => notify("No new notifications.")}
-            >
-              <Bell size={18} />
-            </button>
-
-            <button
-              className="help-button"
-              onClick={() => navigate("Help")}
-            >
-              <CircleHelp size={17} />
-              Help
-            </button>
-          </div>
-        </header>
-
-        <div className="content">
-          {loading && (
-            <div className="loading-bar">
-              <Loader2 size={16} className="spin" />
-              Connecting to SignalOS...
-            </div>
-          )}
-
-          {page === "Overview" && (
-            <Overview
-              dashboard={dashboard}
-              prospects={prospects}
-              campaigns={campaigns}
-              automation={automation}
-              connectedCount={connectedCount}
-              onNavigate={navigate}
-              onCreateCampaign={() =>
-                setModal({ type: "campaign" })
-              }
-            />
-          )}
-
-          {page === "Automation" && (
-            <AutomationPage
-              automation={automation}
-              updateAutomation={updateAutomation}
-            />
-          )}
-
-          {page === "Integrations" && (
-            <IntegrationsPage
-              providers={providerCards}
-              onConnect={connectProvider}
-              onToggle={toggleProvider}
-              onDisconnect={disconnectProvider}
-              onConfigure={(provider) =>
-                setModal({
-                  type: "configure",
-                  provider,
-                  loading: false
-                })
-              }
-            />
-          )}
-
-          {page === "Campaigns" && (
-            <CampaignsPage
-              campaigns={campaigns}
-              onCreate={() => setModal({ type: "campaign" })}
-              onUpdate={updateCampaign}
-            />
-          )}
-
-          {page === "Prospects" && (
-            <ProspectsPage prospects={prospects} />
-          )}
-
-          {page === "Companies" && (
-            <EmptyPage
-              icon={Globe2}
-              title="Companies"
-              description="Company intelligence and account-level signals will appear here."
-            />
-          )}
-
-          {page === "Intent Signals" && (
-            <EmptyPage
-              icon={Target}
-              title="Intent Signals"
-              description="Monitor funding, hiring, expansion, technology and buying signals."
-            />
-          )}
-
-          {page === "Conversations" && (
-            <EmptyPage
-              icon={MessageSquare}
-              title="Conversations"
-              description="Email and outbound conversations will appear here."
-            />
-          )}
-
-          {page === "Meetings" && (
-            <EmptyPage
-              icon={CalendarDays}
-              title="Meetings"
-              description="Booked meetings and calendar activity will appear here."
-            />
-          )}
-
-          {page === "AI Activity" && (
-            <AIActivityPage />
-          )}
-
-          {page === "Analytics" && (
-            <AnalyticsPage
-              dashboard={dashboard}
-              campaigns={campaigns}
-              prospects={prospects}
-            />
-          )}
-
-          {page === "Settings" && (
-            <SettingsPage
-              workspace={workspace}
-              automation={automation}
-              connectedCount={connectedCount}
-              onAutomation={updateAutomation}
-            />
-          )}
-
-          {page === "Help" && <HelpPage />}
-        </div>
-      </main>
-
-      {modal?.type === "campaign" && (
-        <CampaignModal
-          onClose={() => setModal(null)}
-          onCreate={createCampaign}
-        />
-      )}
-
-      {modal?.type === "connect" && (
-        <ConnectModal
-          provider={modal.provider}
-          loading={modal.loading}
-          onClose={() => setModal(null)}
-        />
-      )}
-
-      {modal?.type === "configure" && (
-        <ConfigureModal
-          provider={modal.provider}
-          onClose={() => setModal(null)}
-          onSave={configureProvider}
-        />
-      )}
-
-      {toast && (
-        <div className={`toast ${toast.type}`}>
-          {toast.type === "error" ? (
-            <AlertCircle size={18} />
-          ) : (
-            <Check size={18} />
-          )}
-          <span>{toast.message}</span>
-          <button onClick={() => setToast(null)}>
-            <X size={15} />
-          </button>
-        </div>
-      )}
-    </div>
+   <SetupWizard
+    onboarding={onboarding}
+    complete={completeSetup}
+    health={health}
+   />
   );
+ }
+
+ return (
+  <div className="app-shell">
+
+   <aside
+    className={
+     `sidebar ${mobile?'open':''}`
+    }
+   >
+
+    <div className="brand">
+
+     <div className="brand-mark">
+      S
+     </div>
+
+     <div>
+      <strong>
+       SignalOS
+      </strong>
+
+      <span>
+       AI Prospecting & Outbound OS
+      </span>
+     </div>
+
+    </div>
+
+    <div className="workspace-switch">
+
+     <div className="workspace-avatar">
+      S
+     </div>
+
+     <div>
+      <b>
+       SignalOS Workspace
+      </b>
+
+      <small>
+       Workspace · ID {WS}
+      </small>
+     </div>
+
+     <ChevronDown size={15}/>
+
+    </div>
+
+    <div className="side-scroll">
+
+     <nav>
+
+      {groups.map(group=>(
+
+       <div
+        className="nav-group"
+        key={group.title}
+       >
+
+        <div className="nav-label">
+         {group.title}
+        </div>
+
+        {group.items.map(
+         ([id,label,Icon])=>(
+
+          <button
+           key={id}
+           className={
+            page===id
+            ?'active'
+            :''
+           }
+           onClick={()=>
+            navigate(id)
+           }
+          >
+
+           <Icon size={17}/>
+
+           <span>
+            {label}
+           </span>
+
+           {
+            id==='notifications'
+            &&
+            unread>0
+            &&
+            <em>
+             {unread}
+            </em>
+           }
+
+           {
+            id==='integrations'
+            &&
+            stats.connected_integrations>0
+            &&
+            <em>
+             {
+              stats.connected_integrations
+             }
+            </em>
+           }
+
+          </button>
+
+         )
+        )}
+
+       </div>
+
+      ))}
+
+     </nav>
+
+    </div>
+
+    <div className="sidebar-bottom">
+
+     <button
+      onClick={()=>{
+       setTourStep(0);
+       setShowTour(true);
+      }}
+     >
+      <BookOpen size={17}/>
+      Product tour
+     </button>
+
+     <div className="user-card">
+
+      <div className="avatar">
+       JW
+      </div>
+
+      <div>
+       <b>
+        Workspace owner
+       </b>
+
+       <small>
+        Administrator
+       </small>
+      </div>
+
+     </div>
+
+    </div>
+
+   </aside>
+
+   <main className="main">
+
+    <header className="topbar">
+
+     <button
+      className="mobile-menu"
+      onClick={()=>
+       setMobile(!mobile)
+      }
+     >
+      <Menu/>
+     </button>
+
+     <div className="crumb">
+
+      <Command size={15}/>
+
+      <span>
+       SignalOS
+      </span>
+
+      <ChevronRight size={14}/>
+
+      <b>
+       {titleFor(page)}
+      </b>
+
+     </div>
+
+     <div className="top-actions">
+
+      <div
+       className={
+        `api-status ${health}`
+       }
+      >
+
+       <span/>
+
+       {
+        health==='online'
+        ?'API online'
+        :health==='checking'
+        ?'Checking API'
+        :'API offline'
+       }
+
+      </div>
+
+      <button
+       className="icon-btn"
+       onClick={()=>
+        navigate('notifications')
+       }
+      >
+
+       <Bell size={17}/>
+
+       {unread>0&&<i/>}
+
+      </button>
+
+      <button
+       className="help-btn"
+       onClick={()=>
+        navigate('help')
+       }
+      >
+
+       <CircleHelp size={17}/>
+       Help
+
+      </button>
+
+     </div>
+
+    </header>
+
+    <div className="content">
+
+     {page==='overview'&&
+      <Overview
+       stats={stats}
+       campaigns={campaigns}
+       connectors={connectors}
+       onCampaign={()=>
+        setCampaignModal(true)
+       }
+       onIntegrations={()=>
+        navigate('integrations')
+       }
+      />
+     }
+
+     {page==='prospects'&&
+      <Prospects
+       items={prospects}
+       onAdd={async()=>{
+        const name=
+         window.prompt(
+          'Prospect name'
+         );
+
+        if(!name)return;
+
+        try{
+
+         await api(
+          `/workspaces/${WS}/prospects`,
+          {
+           method:'POST',
+           body:JSON.stringify({
+            name,
+            status:'NEW'
+           })
+          }
+         );
+
+         notify(
+          'Prospect added'
+         );
+
+         await loadAll(true);
+
+        }catch(e){
+
+         notify(
+          e.message,
+          'error'
+         );
+
+        }
+       }}
+      />
+     }
+
+     {page==='companies'&&
+      <Companies
+       items={companies}
+       onAdd={async()=>{
+        const name=
+         window.prompt(
+          'Company name'
+         );
+
+        if(!name)return;
+
+        try{
+
+         await api(
+          `/workspaces/${WS}/companies`,
+          {
+           method:'POST',
+           body:JSON.stringify({
+            name
+           })
+          }
+         );
+
+         notify(
+          'Company added'
+         );
+
+         await loadAll(true);
+
+        }catch(e){
+
+         notify(
+          e.message,
+          'error'
+         );
+
+        }
+       }}
+      />
+     }
+
+     {page==='signals'&&
+      <Signals/>
+     }
+
+     {page==='campaigns'&&
+      <Campaigns
+       items={campaigns}
+       onNew={()=>
+        setCampaignModal(true)
+       }
+       onOpen={
+        setSelectedCampaign
+       }
+       onStatus={
+        campaignStatus
+       }
+      />
+     }
+
+     {page==='conversations'&&
+      <Conversations/>
+     }
+
+     {page==='meetings'&&
+      <Meetings/>
+     }
+
+     {page==='activity'&&
+      <ActivityPage
+       items={activity}
+      />
+     }
+
+     {page==='analytics'&&
+      <Analytics
+       stats={stats}
+      />
+     }
+
+     {page==='integrations'&&
+      <Integrations
+       list={filtered}
+       categories={cats}
+       cat={integrationCategory}
+       setCat={setIntegrationCategory}
+       search={integrationSearch}
+       setSearch={setIntegrationSearch}
+       onConnect={connect}
+       onConfigure={
+        setIntegrationModal
+       }
+       onToggle={toggle}
+      />
+     }
+
+     {page==='automation'&&
+      <Automation/>
+     }
+
+     {page==='notifications'&&
+      <Notifications
+       items={notifications}
+       markRead={markRead}
+      />
+     }
+
+     {page==='settings'&&
+      <SettingsPage
+       notify={notify}
+       onSaved={()=>
+        loadAll(true)
+       }
+      />
+     }
+
+     {page==='help'&&
+      <Help/>
+     }
+
+    </div>
+
+   </main>
+
+   {campaignModal&&
+    <CampaignModal
+     campaign={campaign}
+     setCampaign={setCampaign}
+     close={()=>
+      setCampaignModal(false)
+     }
+     create={createCampaign}
+    />
+   }
+
+   {selectedCampaign&&
+    <CampaignDetail
+     c={selectedCampaign}
+     close={()=>
+      setSelectedCampaign(null)
+     }
+     onStatus={campaignStatus}
+    />
+   }
+
+   {integrationModal&&
+    <IntegrationModal
+     p={integrationModal}
+     close={()=>
+      setIntegrationModal(null)
+     }
+     connect={connect}
+     configure={configure}
+     disconnect={disconnect}
+    />
+   }
+
+   {showTour&&
+    <Tour
+     step={tourStep}
+     setStep={setTourStep}
+     close={()=>
+      setShowTour(false)
+     }
+    />
+   }
+
+   {toast&&
+    <div
+     className={
+      `toast ${toast.type}`
+     }
+    >
+     <span>
+      {toast.type==='success'
+       ?<Check size={15}/>
+       :<X size={15}/>
+      }
+     </span>
+     {toast.message}
+    </div>
+   }
+
+  </div>
+ );
 }
 
-/* ---------------------------------------------------------
-   OVERVIEW
---------------------------------------------------------- */
+function titleFor(p){
+ return p
+  .split('-')
+  .map(
+   x=>x[0].toUpperCase()+x.slice(1)
+  )
+  .join(' ');
+}
+
+function PageHead({
+ eyebrow,
+ title,
+ sub,
+ action,
+ onAction,
+ secondary
+}){
+
+ return (
+  <div className="page-head">
+
+   <div>
+
+    <div className="eyebrow">
+     {eyebrow}
+    </div>
+
+    <h1>
+     {title}
+    </h1>
+
+    <p>
+     {sub}
+    </p>
+
+   </div>
+
+   <div className="head-actions">
+
+    {secondary}
+
+    {action&&
+     <button
+      className="primary"
+      onClick={onAction}
+     >
+      <Plus size={16}/>
+      {action}
+     </button>
+    }
+
+   </div>
+
+  </div>
+ );
+}
 
 function Overview({
-  dashboard,
-  prospects,
-  campaigns,
-  automation,
-  connectedCount,
-  onNavigate,
-  onCreateCampaign
-}) {
-  const activeCampaigns = campaigns.filter(
-    (c) => c.status === "active"
+ stats,
+ campaigns,
+ connectors,
+ onCampaign,
+ onIntegrations
+}){
+
+ const connected=
+  connectors.filter(
+   x=>x.status==='CONNECTED'
   ).length;
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="WORKSPACE / OVERVIEW"
-        title="Revenue intelligence"
-        description="Find the right prospects, understand why now, and automate the next action."
-        action={
-          <button
-            className="primary-button"
-            onClick={onCreateCampaign}
-          >
-            <Plus size={17} />
-            New campaign
-          </button>
-        }
-      />
+ return (
+  <>
+   <PageHead
+    eyebrow="WORKSPACE OVERVIEW"
+    title="Revenue command center"
+    sub="Live workspace state from the SignalOS backend."
+    secondary={
+     <button
+      className="secondary"
+      onClick={onIntegrations}
+     >
+      <Link2 size={16}/>
+      Connect tools
+     </button>
+    }
+    action="New campaign"
+    onAction={onCampaign}
+   />
 
-      <div className="stats-grid">
-        <StatCard
-          label="Prospects"
-          value={dashboard?.prospects ?? prospects.length}
-          icon={Users}
-          note="Tracked in workspace"
-        />
-        <StatCard
-          label="Active campaigns"
-          value={dashboard?.active_campaigns ?? activeCampaigns}
-          icon={Rocket}
-          note="Currently running"
-        />
-        <StatCard
-          label="Meetings"
-          value={dashboard?.meetings ?? 0}
-          icon={CalendarDays}
-          note="Booked"
-        />
-        <StatCard
-          label="Connected tools"
-          value={connectedCount}
-          icon={Link2}
-          note="Enabled integrations"
-        />
+   <div className="stat-grid">
+
+    {[
+     ['Prospects',stats.prospects||0,Users],
+     ['Companies',stats.companies||0,Building2],
+     ['Campaigns',stats.campaigns||0,Send],
+     ['Connected tools',connected,Link2]
+    ].map(
+     ([label,value,Icon])=>
+      <div
+       className="stat-card"
+       key={label}
+      >
+
+       <div className="stat-icon">
+        <Icon size={18}/>
+       </div>
+
+       <span>
+        {label}
+       </span>
+
+       <strong>
+        {value}
+       </strong>
+
+       <small>
+        Live backend data
+       </small>
+
+      </div>
+    )}
+
+   </div>
+
+   <div className="grid-two">
+
+    <div className="panel">
+
+     <div className="panel-head">
+
+      <div>
+       <h2>
+        Revenue workflow
+       </h2>
+
+       <p>
+        SignalOS operating loop
+       </p>
       </div>
 
-      <div className="overview-grid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>SignalOS control center</h2>
-              <p>Your operating system for intelligent outbound.</p>
-            </div>
-            <Sparkles size={20} />
-          </div>
+      <span className="live-pill">
+       <span/>
+       Live
+      </span>
 
-          <div className="control-cards">
-            <button onClick={() => onNavigate("Prospects")}>
-              <div className="control-icon blue">
-                <Users size={19} />
-              </div>
-              <div>
-                <strong>Find prospects</strong>
-                <span>Discover and rank potential buyers.</span>
-              </div>
-              <ArrowRight size={17} />
-            </button>
+     </div>
 
-            <button onClick={() => onNavigate("Intent Signals")}>
-              <div className="control-icon orange">
-                <Target size={19} />
-              </div>
-              <div>
-                <strong>Track intent</strong>
-                <span>See why an account may be ready now.</span>
-              </div>
-              <ArrowRight size={17} />
-            </button>
+     <div className="workflow">
 
-            <button onClick={() => onNavigate("Integrations")}>
-              <div className="control-icon green">
-                <Link2 size={19} />
-              </div>
-              <div>
-                <strong>Connect your stack</strong>
-                <span>
-                  Email, CRM, calendar, AI and data providers.
-                </span>
-              </div>
-              <ArrowRight size={17} />
-            </button>
-          </div>
-        </section>
+      {[
+       ['01','Discover','Find accounts with a reason to buy',Target],
+       ['02','Prove','Collect evidence and score timing',ShieldCheck],
+       ['03','Engage','Send context-rich outreach',Send],
+       ['04','Qualify','Understand replies and intent',MessageSquare],
+       ['05','Book','Move qualified buyers to a meeting',Calendar]
+      ].map(
+       ([number,title,description,Icon],index)=>
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>Automation</h2>
-              <p>Current workspace operating mode.</p>
-            </div>
-            <Zap size={20} />
-          </div>
+        <div
+         className="workflow-item"
+         key={number}
+        >
 
-          <div className="automation-summary">
-            <div className="automation-status">
-              <span
-                className={
-                  automation?.automation_enabled
-                    ? "status-dot green"
-                    : "status-dot red"
-                }
-              />
-              <strong>
-                {automation?.automation_enabled
-                  ? "Automation enabled"
-                  : "Automation paused"}
-              </strong>
-            </div>
+         <div className="workflow-num">
+          {number}
+         </div>
 
-            <div className="mode-pill">
-              {String(
-                automation?.ai_mode || "copilot"
-              ).toUpperCase()}
-            </div>
-          </div>
+         <Icon size={18}/>
 
-          <button
-            className="secondary-button full"
-            onClick={() => onNavigate("Automation")}
-          >
-            Manage automation
-            <ArrowRight size={16} />
-          </button>
-        </section>
-      </div>
-    </div>
-  );
-}
+         <div>
+          <b>
+           {title}
+          </b>
 
-/* ---------------------------------------------------------
-   AUTOMATION
---------------------------------------------------------- */
+          <small>
+           {description}
+          </small>
+         </div>
 
-function AutomationPage({ automation, updateAutomation }) {
-  const safeAutomation = {
-    automation_enabled:
-      automation?.automation_enabled ?? true,
-    ai_mode: automation?.ai_mode || "copilot"
-  };
-
-  return (
-    <div>
-      <PageHeader
-        eyebrow="SYSTEM / AUTOMATION"
-        title="Automation"
-        description="Control how much autonomy SignalOS has across your workspace."
-      />
-
-      <section className="automation-panel">
-        <div className="automation-header">
-          <div className="automation-title">
-            <div className="large-icon orange">
-              <Zap size={22} />
-            </div>
-            <div>
-              <h2>Master automation</h2>
-              <p>
-                One switch pauses automated actions across the
-                workspace.
-              </p>
-            </div>
-          </div>
-
-          <button
-            className={`toggle-large ${
-              safeAutomation.automation_enabled ? "on" : ""
-            }`}
-            onClick={() =>
-              updateAutomation({
-                automation_enabled:
-                  !safeAutomation.automation_enabled
-              })
-            }
-          >
-            {safeAutomation.automation_enabled ? "ON" : "OFF"}
-          </button>
-        </div>
-
-        <div className="mode-grid">
-          {[
-            [
-              "manual",
-              "Manual",
-              "Nothing executes without approval.",
-              SlidersHorizontal
-            ],
-            [
-              "copilot",
-              "Copilot",
-              "Research and draft; you approve actions.",
-              Bot
-            ],
-            [
-              "autopilot",
-              "Autopilot",
-              "Execute approved workflows within limits.",
-              Sparkles
-            ]
-          ].map(([value, title, description, Icon]) => (
-            <button
-              key={value}
-              className={`mode-card ${
-                safeAutomation.ai_mode === value
-                  ? "selected"
-                  : ""
-              }`}
-              onClick={() =>
-                updateAutomation({ ai_mode: value })
-              }
-            >
-              <div className="radio">
-                {safeAutomation.ai_mode === value && (
-                  <span />
-                )}
-              </div>
-              <Icon size={19} />
-              <div>
-                <strong>{title}</strong>
-                <span>{description}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------
-   INTEGRATIONS
---------------------------------------------------------- */
-
-function IntegrationsPage({
-  providers,
-  onConnect,
-  onToggle,
-  onDisconnect,
-  onConfigure
-}) {
-  const [category, setCategory] = useState("All");
-  const [search, setSearch] = useState("");
-
-  const filtered = providers.filter((provider) => {
-    const categoryMatch =
-      category === "All" || provider.category === category;
-
-    const searchMatch =
-      !search ||
-      provider.name.toLowerCase().includes(search.toLowerCase()) ||
-      provider.description
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      provider.category
-        .toLowerCase()
-        .includes(search.toLowerCase());
-
-    return categoryMatch && searchMatch;
-  });
-
-  return (
-    <div>
-      <PageHeader
-        eyebrow="SYSTEM / INTEGRATIONS"
-        title="Integrations"
-        description="Connect the tools your team already uses. SignalOS never needs the provider password."
-      />
-
-      <div className="integration-banner">
-        <div className="integration-banner-icon">
-          <ShieldCheck size={22} />
-        </div>
-        <div>
-          <strong>Your stack, your accounts</strong>
-          <span>
-            Choose a provider, review permissions, then connect
-            your own account. Credentials remain protected.
-          </span>
-        </div>
-        <div className="connected-counter">
-          {providers.filter(
-            (p) => p.connected && p.enabled !== false
-          ).length}{" "}
-          connected
-        </div>
-      </div>
-
-      <div className="integration-toolbar">
-        <div className="search-box">
-          <Search size={17} />
-          <input
-            placeholder="Search integrations"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+         {index<4&&
+          <ChevronRight
+           className="workflow-arrow"
+           size={16}
           />
-          {search && (
-            <button onClick={() => setSearch("")}>
-              <X size={15} />
-            </button>
-          )}
-        </div>
+         }
 
-        <div className="category-scroll">
-          {CATEGORIES.map((item) => (
-            <button
-              key={item}
-              className={
-                category === item ? "category active" : "category"
-              }
-              onClick={() => setCategory(item)}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="integration-count">
-        {filtered.length} integrations
-        {category !== "All" && ` · ${category}`}
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="empty-state">
-          <Search size={30} />
-          <h3>No integrations found</h3>
-          <p>
-            Try another search or select All integrations.
-          </p>
-          <button
-            className="secondary-button"
-            onClick={() => {
-              setSearch("");
-              setCategory("All");
-            }}
-          >
-            Reset filters
-          </button>
-        </div>
-      ) : (
-        <div className="integration-grid">
-          {filtered.map((provider) => (
-            <IntegrationCard
-              key={provider.id}
-              provider={provider}
-              onConnect={onConnect}
-              onToggle={onToggle}
-              onDisconnect={onDisconnect}
-              onConfigure={onConfigure}
-            />
-          ))}
         </div>
       )}
+
+     </div>
+
     </div>
-  );
+
+    <div className="panel">
+
+     <div className="panel-head">
+
+      <div>
+       <h2>
+        Campaigns
+       </h2>
+
+       <p>
+        Recent outbound workflows
+       </p>
+      </div>
+
+     </div>
+
+     {campaigns.length
+      ?campaigns.slice(0,5).map(
+       campaign=>
+        <div
+         className="list-row"
+         key={campaign.id}
+        >
+
+         <div className="row-icon">
+          <Send size={15}/>
+         </div>
+
+         <div>
+          <b>
+           {campaign.name}
+          </b>
+
+          <small>
+           {campaign.channel} · {campaign.status}
+          </small>
+         </div>
+
+         <span
+          className={
+           `badge ${String(
+            campaign.status
+           ).toLowerCase()}`
+          }
+         >
+          {campaign.status}
+         </span>
+
+        </div>
+      )
+      :
+      <Empty
+       title="No campaigns yet"
+       text="Create a campaign to begin."
+      />
+     }
+
+    </div>
+
+   </div>
+  </>
+ );
+}
+
+function Prospects({
+ items,
+ onAdd
+}){
+
+ return (
+  <>
+   <PageHead
+    eyebrow="PROSPECT INTELLIGENCE"
+    title="Prospects"
+    sub="People ranked by fit, evidence and timing."
+    action="Add prospect"
+    onAction={onAdd}
+   />
+
+   <div className="table-panel">
+
+    <table>
+
+     <thead>
+
+      <tr>
+       <th>Prospect</th>
+       <th>Title</th>
+       <th>Country</th>
+       <th>Score</th>
+       <th>Status</th>
+       <th>Intent</th>
+      </tr>
+
+     </thead>
+
+     <tbody>
+
+      {items.length
+       ?items.map(
+        prospect=>
+         <tr key={prospect.id}>
+
+          <td>
+           <div className="person">
+
+            <div className="mini-avatar">
+             {String(
+              prospect.name||'P'
+             ).slice(0,1)}
+            </div>
+
+            <b>
+             {prospect.name}
+            </b>
+
+           </div>
+          </td>
+
+          <td>
+           {prospect.title||'—'}
+          </td>
+
+          <td>
+           {prospect.country||'—'}
+          </td>
+
+          <td>
+           {prospect.score||0}
+          </td>
+
+          <td>
+           <span className="badge">
+            {prospect.status||'NEW'}
+           </span>
+          </td>
+
+          <td>
+           {prospect.intent||'—'}
+          </td>
+
+         </tr>
+       )
+       :
+       <tr>
+        <td colSpan="6">
+         <Empty
+          title="No prospects yet"
+          text="Add a prospect or connect a data provider."
+         />
+        </td>
+       </tr>
+      }
+
+     </tbody>
+
+    </table>
+
+   </div>
+  </>
+ );
+}
+
+function Companies({
+ items,
+ onAdd
+}){
+
+ return (
+  <>
+   <PageHead
+    eyebrow="WORKSPACE"
+    title="Companies"
+    sub="Company records stored in your SignalOS workspace."
+    action="Add company"
+    onAction={onAdd}
+   />
+
+   <div className="table-panel">
+
+    <table>
+
+     <thead>
+      <tr>
+       <th>Company</th>
+       <th>Domain</th>
+       <th>Industry</th>
+       <th>Country</th>
+       <th>Size</th>
+      </tr>
+     </thead>
+
+     <tbody>
+
+      {items.length
+       ?items.map(
+        company=>
+         <tr key={company.id}>
+
+          <td>
+           <b>
+            {company.name}
+           </b>
+          </td>
+
+          <td>
+           {company.domain||'—'}
+          </td>
+
+          <td>
+           {company.industry||'—'}
+          </td>
+
+          <td>
+           {company.country||'—'}
+          </td>
+
+          <td>
+           {company.size||'—'}
+          </td>
+
+         </tr>
+       )
+       :
+       <tr>
+        <td colSpan="5">
+         <Empty
+          title="No companies yet"
+          text="Add a company or connect a data provider."
+         />
+        </td>
+       </tr>
+      }
+
+     </tbody>
+
+    </table>
+
+   </div>
+  </>
+ );
+}
+
+function Signals(){
+
+ const [items,setItems]=useState([]);
+ const [value,setValue]=useState('');
+ const [busy,setBusy]=useState(false);
+
+ useEffect(()=>{
+  api(
+   `/workspaces/${WS}/signals`
+  )
+  .then(
+   result=>
+    setItems(
+     result.signals||[]
+    )
+  )
+  .catch(()=>{});
+ },[]);
+
+ const save=async()=>{
+
+  if(!value.trim())return;
+
+  setBusy(true);
+
+  try{
+
+   const result=await api(
+    `/workspaces/${WS}/signals`,
+    {
+     method:'PUT',
+     body:JSON.stringify({
+      signals:[
+       ...items,
+       value.trim()
+      ]
+     })
+    }
+   );
+
+   setItems(
+    result.signals||[]
+   );
+
+   setValue('');
+
+  }catch(e){
+
+   alert(
+    e.message
+   );
+
+  }finally{
+
+   setBusy(false);
+
+  }
+ };
+
+ return (
+  <>
+   <PageHead
+    eyebrow="INTELLIGENCE"
+    title="Intent signals"
+    sub="Define the events that make a prospect worth contacting now."
+   />
+
+   <div className="card signal-card">
+
+    <div className="signal-add">
+
+     <input
+      value={value}
+      onChange={e=>
+       setValue(e.target.value)
+      }
+      placeholder="e.g. raised seed funding, hiring sales team"
+     />
+
+     <button
+      className="primary"
+      disabled={busy}
+      onClick={save}
+     >
+      <Plus size={15}/>
+      Add
+     </button>
+
+    </div>
+
+    <div className="tag-list">
+
+     {items.map(
+      item=>
+       <span key={item}>
+        {item}
+       </span>
+     )}
+
+    </div>
+
+    {!items.length&&
+     <Empty
+      title="No custom signals"
+      text="Add your first buying signal."
+     />
+    }
+
+   </div>
+  </>
+ );
+}
+
+function Campaigns({
+ items,
+ onNew,
+ onOpen,
+ onStatus
+}){
+
+ return (
+  <>
+   <PageHead
+    eyebrow="OUTBOUND"
+    title="Campaigns"
+    sub="Create, review, activate and pause real campaigns."
+    action="New campaign"
+    onAction={onNew}
+   />
+
+   <div className="campaign-grid">
+
+    {items.length
+     ?items.map(
+      campaign=>
+
+       <div
+        className="campaign-card"
+        key={campaign.id}
+        onClick={()=>
+         onOpen(campaign)
+        }
+       >
+
+        <div className="campaign-top">
+
+         <div className="campaign-icon">
+          <Send size={17}/>
+         </div>
+
+         <span
+          className={
+           `badge ${String(
+            campaign.status||'DRAFT'
+           ).toLowerCase()}`
+          }
+         >
+          {campaign.status}
+         </span>
+
+        </div>
+
+        <h3>
+         {campaign.name}
+        </h3>
+
+        <p>
+         {campaign.industries||'All industries'}
+         {' · '}
+         {campaign.countries||'Global'}
+        </p>
+
+        <div className="campaign-meta">
+
+         <span>
+          <Users size={13}/>
+          {campaign.decision_makers||'Decision makers'}
+         </span>
+
+         <span>
+          <Zap size={13}/>
+          {campaign.signals||'Signals'}
+         </span>
+
+        </div>
+
+        <div
+         className="campaign-actions"
+         onClick={e=>
+          e.stopPropagation()
+         }
+        >
+
+         {campaign.status==='ACTIVE'
+          ?
+          <button
+           className="secondary"
+           onClick={()=>
+            onStatus(
+             campaign.id,
+             'PAUSED'
+            )
+           }
+          >
+           <Pause size={14}/>
+           Pause
+          </button>
+          :
+          <button
+           className="primary small"
+           onClick={()=>
+            onStatus(
+             campaign.id,
+             'ACTIVE'
+            )
+           }
+          >
+           <Play size={14}/>
+           Activate
+          </button>
+         }
+
+         <button
+          className="icon-btn"
+          onClick={()=>
+           onOpen(campaign)
+          }
+         >
+          <MoreHorizontal size={16}/>
+         </button>
+
+        </div>
+
+       </div>
+     )
+     :
+     <div className="empty-card">
+
+      <Send size={25}/>
+
+      <h2>
+       No campaigns yet
+      </h2>
+
+      <p>
+       Create your first campaign.
+       It will be stored in Supabase
+       through the Render backend.
+      </p>
+
+      <button
+       className="primary"
+       onClick={onNew}
+      >
+       <Plus size={15}/>
+       Create campaign
+      </button>
+
+     </div>
+    }
+
+   </div>
+  </>
+ );
+}
+
+function Conversations(){
+
+ return (
+  <>
+   <PageHead
+    eyebrow="OUTBOUND"
+    title="Conversations"
+    sub="Real email threads will appear here once an email provider is connected."
+   />
+
+   <div className="empty-card">
+
+    <MessageSquare size={25}/>
+
+    <h2>
+     Inbox is ready
+    </h2>
+
+    <p>
+     Connect Gmail, Microsoft 365
+     or an email delivery provider
+     to begin.
+    </p>
+
+   </div>
+  </>
+ );
+}
+
+function Meetings(){
+
+ return (
+  <>
+   <PageHead
+    eyebrow="OUTBOUND"
+    title="Meetings"
+    sub="Booked meetings and calendar events will appear here."
+   />
+
+   <div className="empty-card">
+
+    <Calendar size={25}/>
+
+    <h2>
+     Calendar is ready
+    </h2>
+
+    <p>
+     Connect Google Calendar,
+     Outlook Calendar or Calendly.
+    </p>
+
+   </div>
+  </>
+ );
+}
+
+function ActivityPage({
+ items
+}){
+
+ return (
+  <>
+   <PageHead
+    eyebrow="INTELLIGENCE"
+    title="AI activity"
+    sub="Only real backend activity is shown here. No fabricated events."
+   />
+
+   <div className="card activity-list">
+
+    {items.length
+     ?items.map(
+      item=>
+       <div
+        className="activity-row"
+        key={item.id}
+       >
+
+        <div className="activity-dot">
+         <Activity size={14}/>
+        </div>
+
+        <div>
+
+         <b>
+          {item.title}
+         </b>
+
+         <p>
+          {item.detail}
+         </p>
+
+         <small>
+          {new Date(
+           item.created_at
+          ).toLocaleString()}
+         </small>
+
+        </div>
+
+       </div>
+     )
+     :
+     <Empty
+      title="No activity yet"
+      text="Real research, integration and campaign events will appear here."
+     />
+    }
+
+   </div>
+  </>
+ );
+}
+
+function Analytics({
+ stats
+}){
+
+ return (
+  <>
+   <PageHead
+    eyebrow="INTELLIGENCE"
+    title="Analytics"
+    sub="Workspace-level operating metrics from the backend."
+   />
+
+   <div className="analytics-grid">
+
+    {[
+     ['Prospects',stats.prospects||0,Users],
+     ['Companies',stats.companies||0,Building2],
+     ['Campaigns',stats.campaigns||0,Send],
+     ['Interactions',stats.interactions||0,Activity]
+    ].map(
+     ([title,value,Icon])=>
+      <div
+       className="metric-large"
+       key={title}
+      >
+
+       <Icon size={18}/>
+
+       <span>
+        {title}
+       </span>
+
+       <strong>
+        {value}
+       </strong>
+
+       <small>
+        Live data
+       </small>
+
+      </div>
+    )}
+
+   </div>
+  </>
+ );
+}
+
+function Integrations({
+ list,
+ categories,
+ cat,
+ setCat,
+ search,
+ setSearch,
+ onConnect,
+ onConfigure,
+ onToggle
+}){
+
+ const connected=
+  list.filter(
+   x=>x.status==='CONNECTED'
+  ).length;
+
+ return (
+  <>
+   <PageHead
+    eyebrow="APP MARKETPLACE"
+    title="Integrations"
+    sub="Connect customer-owned tools. SignalOS never asks for a provider password."
+   />
+
+   <div className="integration-hero">
+
+    <div>
+
+     <div className="hero-icon">
+      <ShieldCheck size={21}/>
+     </div>
+
+     <div>
+
+      <h2>
+       Your stack. Your accounts.
+      </h2>
+
+      <p>
+       OAuth providers open the provider's
+       official login. API providers use
+       secure credentials sent directly to
+       SignalOS over HTTPS.
+      </p>
+
+     </div>
+
+    </div>
+
+    <strong>
+     {connected} connected
+    </strong>
+
+   </div>
+
+   <div className="integration-toolbar">
+
+    <div className="search">
+
+     <Search size={16}/>
+
+     <input
+      value={search}
+      onChange={e=>
+       setSearch(e.target.value)
+      }
+      placeholder="Search 30+ integrations"
+     />
+
+    </div>
+
+    <div className="category-pills">
+
+     {categories.map(
+      category=>
+       <button
+        key={category}
+        className={
+         cat===category
+         ?'selected'
+         :''
+        }
+        onClick={()=>
+         setCat(category)
+        }
+       >
+        {category}
+       </button>
+     )}
+
+    </div>
+
+   </div>
+
+   <div className="integration-grid">
+
+    {list.map(
+     provider=>
+      <IntegrationCard
+       key={provider.id}
+       p={provider}
+       onConnect={onConnect}
+       onConfigure={onConfigure}
+       onToggle={onToggle}
+      />
+    )}
+
+   </div>
+
+   {!list.length&&
+    <div className="empty-card">
+
+     <FileText size={25}/>
+
+     <h2>
+      No matching integrations
+     </h2>
+
+     <p>
+      Try another category or search.
+     </p>
+
+    </div>
+   }
+
+  </>
+ );
+}
+
+function Logo({
+ p,
+ large=false
+}){
+
+ return (
+  <div
+   className={
+    `provider-logo ${large?'large':''}`
+   }
+  >
+
+   <img
+    src={p.logo}
+    alt=""
+    onError={event=>{
+     event.currentTarget.style.display='none';
+     event.currentTarget.parentElement
+      .classList.add('fallback');
+    }}
+   />
+
+   <span>
+    {String(
+     p.name||'S'
+    ).slice(0,1)}
+   </span>
+
+  </div>
+ );
 }
 
 function IntegrationCard({
-  provider,
-  onConnect,
-  onToggle,
-  onDisconnect,
-  onConfigure
-}) {
-  const connected = provider.connected;
+ p,
+ onConnect,
+ onConfigure,
+ onToggle
+}){
 
-  return (
-    <div className="integration-card">
-      <div className="integration-card-top">
-        <ProviderIcon provider={provider} />
+ const connected=
+  p.status==='CONNECTED';
 
-        <div className="provider-title">
-          <div>
-            <strong>{provider.name}</strong>
-            {connected && (
-              <span className="connected-badge">
-                <Check size={12} />
-                Connected
-              </span>
-            )}
-          </div>
-          <span>{provider.category}</span>
-        </div>
+ return (
+  <div className="integration-card">
 
-        <button className="more-button">
-          <MoreHorizontal size={17} />
-        </button>
-      </div>
+   <div className="int-top">
 
-      <p className="provider-description">
-        {provider.description}
-      </p>
+    <Logo p={p}/>
 
-      <div className="permission-preview">
-        {provider.permissions.slice(0, 3).map((permission) => (
-          <span key={permission}>
-            <Check size={12} />
-            {permission}
-          </span>
-        ))}
-      </div>
+    <div className="int-tools">
 
-      <div className="integration-card-bottom">
-        {connected ? (
-          <>
-            <button
-              className="secondary-button small"
-              onClick={() => onConfigure(provider)}
-            >
-              Configure
-            </button>
+     {connected
+      ?
+      <label className="switch">
 
-            <button
-              className={`mini-toggle ${
-                provider.enabled !== false ? "enabled" : ""
-              }`}
-              onClick={() =>
-                onToggle(
-                  provider,
-                  provider.enabled === false
-                )
-              }
-            >
-              {provider.enabled === false
-                ? "Disabled"
-                : "Enabled"}
-            </button>
-
-            <button
-              className="disconnect-button"
-              onClick={() => onDisconnect(provider)}
-            >
-              Disconnect
-            </button>
-          </>
-        ) : (
-          <button
-            className="connect-button"
-            onClick={() => onConnect(provider)}
-          >
-            Connect
-            <ArrowRight size={15} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------
-   CAMPAIGNS
---------------------------------------------------------- */
-
-function CampaignsPage({ campaigns, onCreate, onUpdate }) {
-  return (
-    <div>
-      <PageHeader
-        eyebrow="OUTBOUND / CAMPAIGNS"
-        title="Campaigns"
-        description="Create evidence-driven outbound workflows."
-        action={
-          <button className="primary-button" onClick={onCreate}>
-            <Plus size={17} />
-            New campaign
-          </button>
+       <input
+        type="checkbox"
+        checked={
+         p.enabled!==false
         }
-      />
+        onChange={e=>
+         onToggle(
+          p,
+          e.target.checked
+         )
+        }
+       />
 
-      <section className="panel">
-        {campaigns.length === 0 ? (
-          <div className="empty-state compact">
-            <Rocket size={30} />
-            <h3>No campaigns yet</h3>
-            <p>
-              Create your first campaign to start building an
-              outbound workflow.
-            </p>
-            <button
-              className="primary-button"
-              onClick={onCreate}
-            >
-              <Plus size={16} />
-              Create campaign
-            </button>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Campaign</th>
-                  <th>Status</th>
-                  <th>Channel</th>
-                  <th>Created</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {campaigns.map((campaign) => (
-                  <tr key={campaign.id}>
-                    <td>
-                      <strong>
-                        {campaign.name || "Untitled campaign"}
-                      </strong>
-                      <span className="table-sub">
-                        {campaign.description || "SignalOS outbound"}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`status-badge ${
-                          campaign.status || "draft"
-                        }`}
-                      >
-                        {campaign.status || "draft"}
-                      </span>
-                    </td>
-                    <td>
-                      {campaign.channel || "Email"}
-                    </td>
-                    <td>
-                      {campaign.created_at
-                        ? new Date(
-                            campaign.created_at
-                          ).toLocaleDateString()
-                        : "—"}
-                    </td>
-                    <td>
-                      {campaign.status === "active" ? (
-                        <button
-                          className="table-action"
-                          onClick={() =>
-                            onUpdate(campaign.id, "paused")
-                          }
-                        >
-                          <Pause size={15} />
-                          Pause
-                        </button>
-                      ) : (
-                        <button
-                          className="table-action"
-                          onClick={() =>
-                            onUpdate(campaign.id, "active")
-                          }
-                        >
-                          <Play size={15} />
-                          Activate
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+       <span/>
+
+      </label>
+      :
+      <span className="available">
+       Available
+      </span>
+     }
+
+     <button
+      className="icon-btn"
+      onClick={()=>
+       onConfigure(p)
+      }
+     >
+      <MoreHorizontal size={16}/>
+     </button>
+
     </div>
-  );
+
+   </div>
+
+   <div className="integration-category">
+    {p.category}
+   </div>
+
+   <h3>
+    {p.name}
+   </h3>
+
+   <p>
+    {p.description}
+   </p>
+
+   <div className="scope-row">
+
+    {(p.scopes||[])
+     .slice(0,3)
+     .map(
+      scope=>
+       <span key={scope}>
+        {scope}
+       </span>
+     )}
+
+   </div>
+
+   <div className="card-bottom">
+
+    {connected
+     ?
+     <>
+      <span className="connected">
+       <Check size={14}/>
+       Connected
+      </span>
+
+      <button
+       className="secondary small"
+       onClick={()=>
+        onConfigure(p)
+       }
+      >
+       Manage
+      </button>
+     </>
+     :
+     p.auth==='oauth'
+     ?
+     <button
+      className="primary small"
+      onClick={()=>
+       onConnect(p)
+      }
+     >
+      Connect
+      <ExternalLink size={14}/>
+     </button>
+     :
+     <button
+      className="primary small"
+      onClick={()=>
+       onConfigure(p)
+      }
+     >
+      Add credentials
+      <ArrowRight size={14}/>
+     </button>
+    }
+
+   </div>
+
+  </div>
+ );
 }
 
-/* ---------------------------------------------------------
-   PROSPECTS
---------------------------------------------------------- */
+function Automation(){
 
-function ProspectsPage({ prospects }) {
-  return (
-    <div>
-      <PageHeader
-        eyebrow="WORKSPACE / PROSPECTS"
-        title="Prospects"
-        description="Your AI-ranked prospect universe."
-      />
+ const [settings,setSettings]=useState({
+  automation_enabled:false,
+  ai_mode:'copilot'
+ });
 
-      <section className="panel">
-        {prospects.length === 0 ? (
-          <div className="empty-state compact">
-            <Users size={30} />
-            <h3>No prospects yet</h3>
-            <p>
-              Connect your data provider or add a prospect to
-              begin building your pipeline.
-            </p>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Prospect</th>
-                  <th>Company</th>
-                  <th>Title</th>
-                  <th>Email</th>
-                  <th>Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {prospects.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <strong>
-                        {p.name ||
-                          `${p.first_name || ""} ${
-                            p.last_name || ""
-                          }`.trim() ||
-                          "Unknown"}
-                      </strong>
-                    </td>
-                    <td>{p.company_name || p.company || "—"}</td>
-                    <td>{p.title || p.job_title || "—"}</td>
-                    <td>{p.email || "—"}</td>
-                    <td>
-                      <span className="score">
-                        {p.score ?? p.intent_score ?? "—"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
+ const [busy,setBusy]=useState(false);
 
-/* ---------------------------------------------------------
-   CAMPAIGN MODAL
---------------------------------------------------------- */
+ useEffect(()=>{
 
-function CampaignModal({ onClose, onCreate }) {
-  const [step, setStep] = useState(1);
-  const [saving, setSaving] = useState(false);
+  api(
+   `/workspaces/${WS}/onboarding`
+  )
+  .then(
+   result=>
+    setSettings(
+     result.settings||{}
+    )
+  )
+  .catch(()=>{});
 
-  const [form, setForm] = useState({
-    name: "",
-    countries: "India",
-    industries: "SaaS",
-    decision_makers: "Founder, CEO, Head of Sales",
-    signals: "Funding, hiring, expansion",
-    channel: "email",
-    booking_link: ""
-  });
+ },[]);
 
-  function update(key, value) {
-    setForm((old) => ({ ...old, [key]: value }));
+ const save=async(
+  enabled,
+  mode
+ )=>{
+
+  setBusy(true);
+
+  try{
+
+   const result=await api(
+    `/workspaces/${WS}/automation`,
+    {
+     method:'PATCH',
+     body:JSON.stringify({
+      enabled,
+      mode
+     })
+    }
+   );
+
+   setSettings(
+    result.settings||{}
+   );
+
+  }catch(e){
+
+   alert(
+    e.message
+   );
+
+  }finally{
+
+   setBusy(false);
+
   }
+ };
 
-  async function submit() {
-    if (!form.name.trim()) return;
+ const enabled=
+  !!settings.automation_enabled;
 
-    setSaving(true);
+ const mode=
+  settings.ai_mode||'copilot';
 
-    await onCreate({
-      name: form.name.trim(),
-      countries: form.countries
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-      industries: form.industries
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-      decision_makers: form.decision_makers
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-      signals: form.signals
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-      channel: form.channel,
-      booking_link: form.booking_link
-    });
+ return (
+  <>
+   <PageHead
+    eyebrow="CONTROL CENTER"
+    title="Automation"
+    sub="OFF by default. Choose the AI operating mode, then explicitly enable execution."
+   />
 
-    setSaving(false);
-  }
+   <div className="automation-panel">
 
-  return (
-    <div className="modal-backdrop">
-      <div className="modal campaign-modal">
-        <div className="modal-header">
-          <div>
-            <span className="eyebrow">CAMPAIGN BUILDER</span>
-            <h2>Create campaign</h2>
-            <p>Build your first evidence-driven workflow.</p>
-          </div>
-          <button onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
+    <div className="kill-switch">
 
-        <div className="stepper">
-          {[1, 2, 3].map((n) => (
-            <div
-              key={n}
-              className={`step ${
-                step >= n ? "active" : ""
-              }`}
-            >
-              <span>{n}</span>
-              <label>
-                {n === 1
-                  ? "Audience"
-                  : n === 2
-                  ? "Signals"
-                  : "Outbound"}
-              </label>
-            </div>
-          ))}
-        </div>
+     <div>
 
-        <div className="modal-body">
-          {step === 1 && (
-            <div className="form-grid">
-              <Field
-                label="Campaign name"
-                value={form.name}
-                onChange={(v) => update("name", v)}
-                placeholder="SaaS Founder Outreach"
-              />
-
-              <Field
-                label="Countries"
-                value={form.countries}
-                onChange={(v) => update("countries", v)}
-                placeholder="India, UAE, UK"
-              />
-
-              <Field
-                label="Industries"
-                value={form.industries}
-                onChange={(v) => update("industries", v)}
-                placeholder="SaaS, FinTech, AI"
-              />
-
-              <Field
-                label="Decision makers"
-                value={form.decision_makers}
-                onChange={(v) =>
-                  update("decision_makers", v)
-                }
-                placeholder="Founder, CEO, CMO"
-              />
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="form-grid">
-              <Field
-                label="Buying signals"
-                value={form.signals}
-                onChange={(v) => update("signals", v)}
-                placeholder="Funding, hiring, expansion"
-                full
-              />
-
-              <div className="info-box">
-                <Lightbulb size={18} />
-                <div>
-                  <strong>SignalOS recommendation</strong>
-                  <p>
-                    Start with signals that indicate an actual
-                    reason to buy instead of simply targeting
-                    job titles.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="form-grid">
-              <div>
-                <label>Outbound channel</label>
-                <select
-                  value={form.channel}
-                  onChange={(e) =>
-                    update("channel", e.target.value)
-                  }
-                >
-                  <option value="email">Email</option>
-                  <option value="email+calendar">
-                    Email + Calendar
-                  </option>
-                </select>
-              </div>
-
-              <Field
-                label="Booking link"
-                value={form.booking_link}
-                onChange={(v) =>
-                  update("booking_link", v)
-                }
-                placeholder="https://calendly.com/..."
-                full
-              />
-
-              <div className="info-box">
-                <ShieldCheck size={18} />
-                <div>
-                  <strong>Safe automation</strong>
-                  <p>
-                    Campaigns respect workspace automation,
-                    provider limits and suppression settings.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="modal-footer">
-          <button className="secondary-button" onClick={onClose}>
-            Cancel
-          </button>
-
-          {step > 1 && (
-            <button
-              className="secondary-button"
-              onClick={() => setStep(step - 1)}
-            >
-              <ChevronLeft size={16} />
-              Back
-            </button>
-          )}
-
-          {step < 3 ? (
-            <button
-              className="primary-button"
-              disabled={step === 1 && !form.name.trim()}
-              onClick={() => setStep(step + 1)}
-            >
-              Continue
-              <ChevronRight size={16} />
-            </button>
-          ) : (
-            <button
-              className="primary-button"
-              disabled={!form.name.trim() || saving}
-              onClick={submit}
-            >
-              {saving ? (
-                <>
-                  <Loader2 size={16} className="spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Rocket size={16} />
-                  Create campaign
-                </>
-              )}
-            </button>
-          )}
-        </div>
+      <div className="hero-icon orange">
+       <Zap size={19}/>
       </div>
+
+      <div>
+
+       <h2>
+        Master automation
+       </h2>
+
+       <p>
+        One switch pauses automated
+        actions across the entire workspace.
+       </p>
+
+      </div>
+
+     </div>
+
+     <button
+      disabled={busy}
+      className={
+       enabled
+       ?'big-switch on'
+       :'big-switch'
+      }
+      onClick={()=>
+       save(
+        !enabled,
+        mode
+       )
+      }
+     >
+      {enabled?'ON':'OFF'}
+     </button>
+
     </div>
-  );
+
+    <div className="mode-grid">
+
+     {[
+      [
+       'manual',
+       'Manual',
+       'Nothing executes without approval'
+      ],
+      [
+       'copilot',
+       'Copilot',
+       'Research and draft; you approve actions'
+      ],
+      [
+       'autopilot',
+       'Autopilot',
+       'Execute approved workflows within limits'
+      ]
+     ].map(
+      ([id,title,description])=>
+
+       <button
+        disabled={busy}
+        className={
+         `mode-card ${
+          mode===id
+          ?'selected'
+          :''
+         }`
+        }
+        onClick={()=>
+         save(
+          enabled,
+          id
+         )
+        }
+        key={id}
+       >
+
+        <div className="mode-radio">
+
+         {mode===id&&
+          <span/>
+         }
+
+        </div>
+
+        <div>
+
+         <b>
+          {title}
+         </b>
+
+         <small>
+          {description}
+         </small>
+
+        </div>
+
+       </button>
+     )}
+
+    </div>
+
+    <div className="safety-list">
+
+     <div>
+      <ShieldCheck/>
+
+      <span>
+       <b>
+        Global kill switch
+       </b>
+
+       <small>
+        Automation stays paused until you enable it.
+       </small>
+      </span>
+     </div>
+
+     <div>
+      <Users/>
+
+      <span>
+       <b>
+        Human control
+       </b>
+
+       <small>
+        Copilot keeps execution reviewable.
+       </small>
+      </span>
+     </div>
+
+     <div>
+      <Zap/>
+
+      <span>
+       <b>
+        Provider limits
+       </b>
+
+       <small>
+        Respect account and sending limits.
+       </small>
+      </span>
+     </div>
+
+    </div>
+
+   </div>
+  </>
+ );
 }
 
-/* ---------------------------------------------------------
-   CONNECT MODAL
---------------------------------------------------------- */
+function Notifications({
+ items,
+ markRead
+}){
 
-function ConnectModal({ provider, loading, onClose }) {
-  return (
-    <div className="modal-backdrop">
-      <div className="modal connection-modal">
-        <div className="modal-header">
-          <div>
-            <span className="eyebrow">{provider.category}</span>
-            <h2>Connect {provider.name}</h2>
-            <p>
-              SignalOS will redirect you to the provider's
-              official authorization page.
-            </p>
-          </div>
+ const unread=
+  items.filter(
+   x=>!x.read
+  ).length;
 
-          <button onClick={onClose}>
-            <X size={20} />
-          </button>
+ return (
+  <>
+   <PageHead
+    eyebrow="SYSTEM"
+    title="Notifications"
+    sub="Operational alerts, integration events and handoffs."
+    secondary={
+     unread
+     ?
+     <button
+      className="secondary"
+      onClick={markRead}
+     >
+      Mark all read
+     </button>
+     :
+     null
+    }
+   />
+
+   <div className="card notification-list">
+
+    {items.length
+     ?items.map(
+      notification=>
+       <div
+        className={
+         `notification ${
+          notification.read
+          ?''
+          :'unread'
+         }`
+        }
+        key={notification.id}
+       >
+
+        <div className="notif-icon">
+         <Bell size={16}/>
         </div>
 
-        <div className="connection-content">
-          <ProviderIcon provider={provider} size={72} />
+        <div>
 
-          <h3>
-            {provider.mode === "oauth"
-              ? "Secure OAuth authorization"
-              : "Secure API connection"}
-          </h3>
+         <b>
+          {notification.title}
+         </b>
 
-          <p>
-            {provider.mode === "oauth"
-              ? "Your provider password is never shared with SignalOS. Authentication happens directly with the provider."
-              : "Your API credential is stored server-side and is never displayed publicly."}
-          </p>
+         <p>
+          {notification.body}
+         </p>
 
-          <div className="permission-box">
-            <strong>SignalOS will request</strong>
+         <small>
+          {new Date(
+           notification.created_at
+          ).toLocaleString()}
+         </small>
 
-            {provider.permissions.map((permission) => (
-              <span key={permission}>
-                <Check size={14} />
-                {permission}
-              </span>
-            ))}
-          </div>
-
-          <div className="security-note">
-            <ShieldCheck size={18} />
-            <div>
-              <strong>Secure connection</strong>
-              <span>
-                You can disable or disconnect this integration
-                at any time.
-              </span>
-            </div>
-          </div>
         </div>
 
-        <div className="modal-footer">
-          <button className="secondary-button" onClick={onClose}>
-            Cancel
-          </button>
+       </div>
+     )
+     :
+     <Empty
+      title="You're all caught up"
+      text="Important workspace events will appear here."
+     />
+    }
 
-          <button className="primary-button" disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 size={16} className="spin" />
-                Connecting...
-              </>
-            ) : (
-              <>
-                Continue
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------
-   CONFIGURE MODAL
---------------------------------------------------------- */
-
-function ConfigureModal({ provider, onClose, onSave }) {
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [model, setModel] = useState("");
-
-  const isAI = provider.category === "AI / LLM";
-
-  return (
-    <div className="modal-backdrop">
-      <div className="modal configure-modal">
-        <div className="modal-header">
-          <div>
-            <span className="eyebrow">
-              {provider.category}
-            </span>
-            <h2>Configure {provider.name}</h2>
-            <p>
-              Add the connection details SignalOS should use.
-            </p>
-          </div>
-
-          <button onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="config-provider">
-            <ProviderIcon provider={provider} size={48} />
-            <div>
-              <strong>{provider.name}</strong>
-              <span>{provider.description}</span>
-            </div>
-          </div>
-
-          <div className="form-grid">
-            <div className="full-field">
-              <label>API key</label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) =>
-                  setApiKey(e.target.value)
-                }
-                placeholder="Paste your API key"
-              />
-            </div>
-
-            {isAI && (
-              <>
-                <div>
-                  <label>Model</label>
-                  <input
-                    value={model}
-                    onChange={(e) =>
-                      setModel(e.target.value)
-                    }
-                    placeholder="e.g. gpt-4.1-mini"
-                  />
-                </div>
-
-                <div>
-                  <label>Base URL</label>
-                  <input
-                    value={baseUrl}
-                    onChange={(e) =>
-                      setBaseUrl(e.target.value)
-                    }
-                    placeholder="Optional"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="security-note">
-            <ShieldCheck size={18} />
-            <div>
-              <strong>Credential protection</strong>
-              <span>
-                Credentials are sent to your SignalOS backend
-                over HTTPS.
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="secondary-button" onClick={onClose}>
-            Cancel
-          </button>
-
-          <button
-            className="primary-button"
-            disabled={!apiKey.trim()}
-            onClick={() =>
-              onSave(provider, {
-                api_key: apiKey,
-                base_url: baseUrl,
-                model
-              })
-            }
-          >
-            <Check size={16} />
-            Save connection
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------
-   OTHER PAGES
---------------------------------------------------------- */
-
-function AIActivityPage() {
-  const events = [
-    ["Research Agent", "Analyzed company buying signal", "2m"],
-    ["Intent Agent", "Detected hiring acceleration", "8m"],
-    ["Scoring Agent", "Ranked prospect 87/100", "14m"],
-    ["Personalization Agent", "Prepared outreach draft", "21m"]
-  ];
-
-  return (
-    <div>
-      <PageHeader
-        eyebrow="INTELLIGENCE / AI ACTIVITY"
-        title="AI activity"
-        description="See what SignalOS agents are researching, scoring and preparing."
-      />
-
-      <section className="panel">
-        <div className="activity-list">
-          {events.map(([agent, text, time]) => (
-            <div className="activity-item" key={agent}>
-              <div className="activity-icon">
-                <Bot size={17} />
-              </div>
-              <div>
-                <strong>{agent}</strong>
-                <span>{text}</span>
-              </div>
-              <time>{time} ago</time>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function AnalyticsPage({ dashboard, campaigns, prospects }) {
-  return (
-    <div>
-      <PageHeader
-        eyebrow="INTELLIGENCE / ANALYTICS"
-        title="Analytics"
-        description="Measure pipeline creation and outbound performance."
-      />
-
-      <div className="stats-grid">
-        <StatCard
-          label="Prospects"
-          value={dashboard?.prospects ?? prospects.length}
-          icon={Users}
-        />
-        <StatCard
-          label="Campaigns"
-          value={campaigns.length}
-          icon={Rocket}
-        />
-        <StatCard
-          label="Meetings"
-          value={dashboard?.meetings ?? 0}
-          icon={CalendarDays}
-        />
-        <StatCard
-          label="Replies"
-          value={dashboard?.replies ?? 0}
-          icon={MessageSquare}
-        />
-      </div>
-    </div>
-  );
+   </div>
+  </>
+ );
 }
 
 function SettingsPage({
-  workspace,
-  automation,
-  connectedCount,
-  onAutomation
-}) {
-  return (
-    <div>
-      <PageHeader
-        eyebrow="SYSTEM / SETTINGS"
-        title="Settings"
-        description="Manage your SignalOS workspace and operating preferences."
-      />
+ notify,
+ onSaved
+}){
 
-      <div className="settings-grid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>Workspace</h2>
-              <p>Basic workspace configuration.</p>
-            </div>
-            <Settings size={19} />
-          </div>
+ const [
+  settings,
+  setSettings
+ ]=useState({
+  workspace_name:'',
+  owner_name:'',
+  owner_email:'',
+  timezone:'Asia/Kolkata',
+  llm_provider:'',
+  llm_model:''
+ });
 
-          <div className="settings-row">
-            <span>Workspace name</span>
-            <strong>
-              {workspace?.name || "Acme Growth"}
-            </strong>
-          </div>
+ const [
+  busy,
+  setBusy
+ ]=useState(false);
 
-          <div className="settings-row">
-            <span>Connected integrations</span>
-            <strong>{connectedCount}</strong>
-          </div>
-        </section>
+ useEffect(()=>{
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h2>AI autonomy</h2>
-              <p>Choose how much SignalOS can execute.</p>
-            </div>
-            <Bot size={19} />
-          </div>
+  api(
+   `/workspaces/${WS}/settings`
+  )
+  .then(result=>{
 
-          <div className="settings-row">
-            <span>Mode</span>
-            <strong>
-              {String(
-                automation?.ai_mode || "copilot"
-              ).toUpperCase()}
-            </strong>
-          </div>
+   setSettings({
 
-          <div className="settings-row">
-            <span>Automation</span>
-            <button
-              className="mini-toggle enabled"
-              onClick={() =>
-                onAutomation({
-                  automation_enabled:
-                    !(automation?.automation_enabled ?? true)
-                })
-              }
-            >
-              {automation?.automation_enabled
-                ? "Enabled"
-                : "Disabled"}
-            </button>
-          </div>
-        </section>
-      </div>
-    </div>
+    workspace_name:
+     result.workspace.name||'',
+
+    owner_name:
+     result.workspace.owner_name||'',
+
+    owner_email:
+     result.workspace.owner_email||'',
+
+    timezone:
+     result.settings.timezone
+     ||'Asia/Kolkata',
+
+    llm_provider:
+     result.settings.llm_provider
+     ||'',
+
+    llm_model:
+     result.settings.llm_model
+     ||''
+   });
+
+  })
+  .catch(
+   error=>
+    notify(
+     error.message,
+     'error'
+    )
   );
+
+ },[]);
+
+ const save=async()=>{
+
+  setBusy(true);
+
+  try{
+
+   await api(
+    `/workspaces/${WS}/settings`,
+    {
+     method:'PATCH',
+
+     body:JSON.stringify({
+
+      name:
+       settings.workspace_name,
+
+      owner_name:
+       settings.owner_name,
+
+      owner_email:
+       settings.owner_email,
+
+      settings:{
+       timezone:
+        settings.timezone,
+
+       llm_provider:
+        settings.llm_provider,
+
+       llm_model:
+        settings.llm_model
+      }
+
+     })
+    }
+   );
+
+   notify(
+    'Settings saved'
+   );
+
+   onSaved(true);
+
+  }catch(e){
+
+   notify(
+    e.message,
+    'error'
+   );
+
+  }finally{
+
+   setBusy(false);
+
+  }
+ };
+
+ return (
+  <>
+   <PageHead
+    eyebrow="SYSTEM"
+    title="Settings"
+    sub="Workspace identity, LLM preference and operating defaults."
+   />
+
+   <div className="card settings-card">
+
+    <div className="form-grid">
+
+     <Field
+      label="Workspace name"
+      value={
+       settings.workspace_name
+      }
+      onChange={value=>
+       setSettings({
+        ...settings,
+        workspace_name:value
+       })
+      }
+     />
+
+     <Field
+      label="Owner name"
+      value={
+       settings.owner_name
+      }
+      onChange={value=>
+       setSettings({
+        ...settings,
+        owner_name:value
+       })
+      }
+     />
+
+     <Field
+      label="Owner email"
+      value={
+       settings.owner_email
+      }
+      onChange={value=>
+       setSettings({
+        ...settings,
+        owner_email:value
+       })
+      }
+     />
+
+     <label className="field">
+
+      <span>
+       Timezone
+      </span>
+
+      <select
+       value={
+        settings.timezone
+       }
+       onChange={event=>
+        setSettings({
+         ...settings,
+         timezone:event.target.value
+        })
+       }
+      >
+
+       <option>
+        Asia/Kolkata
+       </option>
+
+       <option>
+        UTC
+       </option>
+
+       <option>
+        America/New_York
+       </option>
+
+       <option>
+        Europe/London
+       </option>
+
+      </select>
+
+     </label>
+
+     <label className="field">
+
+      <span>
+       Default LLM provider
+      </span>
+
+      <select
+       value={
+        settings.llm_provider
+       }
+       onChange={event=>
+        setSettings({
+         ...settings,
+         llm_provider:event.target.value
+        })
+       }
+      >
+
+       <option value="">
+        Select after connecting
+       </option>
+
+       <option value="openai">
+        OpenAI
+       </option>
+
+       <option value="anthropic">
+        Anthropic / Claude
+       </option>
+
+       <option value="gemini">
+        Google Gemini
+       </option>
+
+       <option value="openrouter">
+        OpenRouter
+       </option>
+
+      </select>
+
+     </label>
+
+     <Field
+      label="Default model"
+      value={
+       settings.llm_model
+      }
+      onChange={value=>
+       setSettings({
+        ...settings,
+        llm_model:value
+       })
+      }
+      placeholder="e.g. gpt-5"
+     />
+
+    </div>
+
+    <div className="save-bar">
+
+     <span>
+      <ShieldCheck size={15}/>
+      Saved through Render → Supabase
+     </span>
+
+     <button
+      className="primary"
+      disabled={busy}
+      onClick={save}
+     >
+
+      {busy
+       ?<Loader2 className="spin"/>
+       :<Check size={15}/>
+      }
+
+      Save settings
+
+     </button>
+
+    </div>
+
+   </div>
+  </>
+ );
 }
 
-function HelpPage() {
-  return (
-    <div>
-      <PageHeader
-        eyebrow="SUPPORT"
-        title="Help & Support"
-        description="Everything you need to operate SignalOS."
-      />
+function Help(){
 
-      <div className="help-grid">
-        {[
-          [
-            "Getting started",
-            "Connect your email, AI provider and calendar, then create your first campaign.",
-            Rocket
-          ],
-          [
-            "Integrations",
-            "Choose the platforms your workspace already uses and connect them securely.",
-            Link2
-          ],
-          [
-            "Automation",
-            "Use Manual, Copilot or Autopilot depending on how much control you want.",
-            Zap
-          ],
-          [
-            "Security",
-            "SignalOS keeps provider credentials server-side and respects workspace controls.",
-            ShieldCheck
-          ]
-        ].map(([title, text, Icon]) => (
-          <div className="help-card" key={title}>
-            <Icon size={21} />
-            <h3>{title}</h3>
-            <p>{text}</p>
-          </div>
-        ))}
+ return (
+  <>
+   <PageHead
+    eyebrow="HELP"
+    title="Help & docs"
+    sub="Operate SignalOS safely and understand each control."
+   />
+
+   <div className="help-grid">
+
+    {[
+     [
+      'Onboarding',
+      'Complete the mandatory setup before the workspace can be used.',
+      BookOpen
+     ],
+     [
+      'Integrations',
+      'OAuth connections open the provider login. API providers use server-side credentials.',
+      Link2
+     ],
+     [
+      'LLM',
+      'Connect OpenAI, Claude, Gemini or OpenRouter. API access is not the same as a consumer ChatGPT login.',
+      Sparkles
+     ],
+     [
+      'Automation',
+      'Manual, Copilot and Autopilot are persisted in the workspace. The master switch is OFF by default.',
+      Zap
+     ],
+     [
+      'Campaigns',
+      'Create, open, review, activate and pause campaigns. Activation checks email, LLM and automation prerequisites.',
+      Send
+     ],
+     [
+      'Notifications',
+      'Integration and campaign events are stored in the workspace notification feed.',
+      Bell
+     ]
+    ].map(
+     ([title,description,Icon])=>
+
+      <div
+       className="help-card"
+       key={title}
+      >
+
+       <Icon size={20}/>
+
+       <h3>
+        {title}
+       </h3>
+
+       <p>
+        {description}
+       </p>
+
       </div>
-    </div>
-  );
+    )}
+
+   </div>
+  </>
+ );
 }
 
-function EmptyPage({ icon: Icon, title, description }) {
-  return (
-    <div>
-      <PageHeader
-        eyebrow="WORKSPACE"
-        title={title}
-        description={description}
-      />
+function CampaignModal({
+ campaign,
+ setCampaign,
+ close,
+ create
+}){
 
-      <div className="empty-state">
-        <Icon size={32} />
-        <h3>Ready for data</h3>
-        <p>{description}</p>
-      </div>
+ return (
+  <div className="modal-backdrop">
+
+   <div className="modal large">
+
+    <button
+     className="close"
+     onClick={close}
+    >
+     <X/>
+    </button>
+
+    <div className="eyebrow">
+     OUTBOUND / NEW CAMPAIGN
     </div>
-  );
+
+    <h2>
+     Create campaign
+    </h2>
+
+    <p>
+     Save the workflow first.
+     Activation happens separately
+     after the required stack is ready.
+    </p>
+
+    <div className="form-grid">
+
+     {[
+      [
+       'name',
+       'Campaign name',
+       'e.g. SaaS founders showing hiring intent'
+      ],
+      [
+       'countries',
+       'Countries',
+       'India, US, UK'
+      ],
+      [
+       'industries',
+       'Industries',
+       'SaaS, Fintech'
+      ],
+      [
+       'decision_makers',
+       'Decision makers',
+       'Founder, CEO, CMO'
+      ],
+      [
+       'signals',
+       'Buying signals',
+       'Funding, hiring, expansion'
+      ],
+      [
+       'booking_link',
+       'Booking link',
+       'https://calendly.com/...'
+      ]
+     ].map(
+      ([key,label,placeholder])=>
+
+       <Field
+        key={key}
+        label={label}
+        value={campaign[key]}
+        onChange={value=>
+         setCampaign({
+          ...campaign,
+          [key]:value
+         })
+        }
+        placeholder={placeholder}
+       />
+     )}
+
+    </div>
+
+    <label className="field">
+
+     <span>
+      Daily sending limit
+     </span>
+
+     <input
+      className="text-input"
+      type="number"
+      min="1"
+      max="1000"
+      value={
+       campaign.daily_limit
+      }
+      onChange={event=>
+       setCampaign({
+        ...campaign,
+        daily_limit:
+         Number(event.target.value)
+       })
+      }
+     />
+
+    </label>
+
+    <div className="modal-actions">
+
+     <button
+      className="secondary"
+      onClick={close}
+     >
+      Cancel
+     </button>
+
+     <button
+      className="primary"
+      onClick={create}
+     >
+      Create campaign
+      <ArrowRight size={15}/>
+     </button>
+
+    </div>
+
+   </div>
+
+  </div>
+ );
 }
 
-/* ---------------------------------------------------------
-   SHARED UI
---------------------------------------------------------- */
+function CampaignDetail({
+ c,
+ close,
+ onStatus
+}){
 
-function PageHeader({ eyebrow, title, description, action }) {
-  return (
-    <div className="page-header">
-      <div>
-        <div className="eyebrow">{eyebrow}</div>
-        <h1>{title}</h1>
-        <p>{description}</p>
-      </div>
+ return (
+  <div className="modal-backdrop">
 
-      {action && <div>{action}</div>}
+   <div className="modal">
+
+    <button
+     className="close"
+     onClick={close}
+    >
+     <X/>
+    </button>
+
+    <div className="eyebrow">
+     CAMPAIGN DETAIL
     </div>
-  );
+
+    <h2>
+     {c.name}
+    </h2>
+
+    <p>
+     Review this saved workflow.
+     Activation is protected by
+     backend prerequisites.
+    </p>
+
+    <div className="detail-grid">
+
+     <div>
+      <span>Status</span>
+      <b>{c.status}</b>
+     </div>
+
+     <div>
+      <span>Channel</span>
+      <b>{c.channel}</b>
+     </div>
+
+     <div>
+      <span>Countries</span>
+      <b>{c.countries||'All'}</b>
+     </div>
+
+     <div>
+      <span>Industries</span>
+      <b>{c.industries||'All'}</b>
+     </div>
+
+     <div>
+      <span>Decision makers</span>
+      <b>{c.decision_makers||'All'}</b>
+     </div>
+
+     <div>
+      <span>Daily limit</span>
+      <b>{c.daily_limit}</b>
+     </div>
+
+    </div>
+
+    <div className="modal-actions">
+
+     {c.status==='ACTIVE'
+      ?
+      <button
+       className="secondary"
+       onClick={()=>
+        onStatus(
+         c.id,
+         'PAUSED'
+        )
+       }
+      >
+       <Pause size={14}/>
+       Pause
+      </button>
+      :
+      <button
+       className="primary"
+       onClick={()=>
+        onStatus(
+         c.id,
+         'ACTIVE'
+        )
+       }
+      >
+       <Play size={14}/>
+       Activate
+      </button>
+     }
+
+     <button
+      className="secondary"
+      onClick={close}
+     >
+      Close
+     </button>
+
+    </div>
+
+   </div>
+
+  </div>
+ );
 }
 
-function StatCard({ label, value, icon: Icon, note }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-icon">
-        <Icon size={18} />
-      </div>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {note && <small>{note}</small>}
+function IntegrationModal({
+ p,
+ close,
+ connect,
+ configure,
+ disconnect
+}){
+
+ const [secret,setSecret]=useState('');
+
+ const connected=
+  p.status==='CONNECTED';
+
+ const apiKey=
+  p.auth==='api_key';
+
+ return (
+  <div className="modal-backdrop">
+
+   <div className="modal">
+
+    <button
+     className="close"
+     onClick={close}
+    >
+     <X/>
+    </button>
+
+    <div className="eyebrow">
+     {p.category}
     </div>
-  );
+
+    <div className="modal-provider">
+
+     <Logo
+      p={p}
+      large
+     />
+
+     <div>
+
+      <h2>
+       {p.name}
+      </h2>
+
+      <p>
+       {p.description}
+      </p>
+
+     </div>
+
+    </div>
+
+    {connected
+     ?
+     <>
+
+      <div className="connected-panel">
+
+       <Check size={18}/>
+
+       <div>
+
+        <b>
+         Connected
+        </b>
+
+        <p>
+         SignalOS has an authorized
+         connection for this workspace.
+         Secrets are never returned
+         to the browser.
+        </p>
+
+       </div>
+
+      </div>
+
+      <div className="scope-list">
+
+       {(p.scopes||[]).map(
+        scope=>
+         <span key={scope}>
+          <Check size={13}/>
+          {scope}
+         </span>
+       )}
+
+      </div>
+
+      <div className="modal-actions">
+
+       <button
+        className="secondary"
+        onClick={close}
+       >
+        Close
+       </button>
+
+       <button
+        className="danger"
+        onClick={()=>
+         disconnect(p)
+        }
+       >
+        <Trash2 size={14}/>
+        Disconnect
+       </button>
+
+      </div>
+
+     </>
+     :
+     <>
+
+      <div className="permission-box">
+
+       <ShieldCheck size={18}/>
+
+       <div>
+
+        <b>
+         {
+          apiKey
+          ?'Secure credential connection'
+          :'Secure OAuth connection'
+         }
+        </b>
+
+        <p>
+         {
+          apiKey
+          ?
+          'Paste the credential from the provider account. SignalOS stores it server-side and never displays it again.'
+          :
+          'Continue to the provider’s official authorization page. SignalOS never asks for the provider password.'
+         }
+        </p>
+
+       </div>
+
+      </div>
+
+      <div className="scope-list">
+
+       {(p.scopes||[]).map(
+        scope=>
+         <span key={scope}>
+          <Check size={13}/>
+          {scope}
+         </span>
+       )}
+
+      </div>
+
+      {p.error&&
+       <div className="error-box">
+        {p.error}
+       </div>
+      }
+
+      {apiKey
+       ?
+       <>
+
+        <label className="field">
+
+         <span>
+          API key / credential
+         </span>
+
+         <input
+          className="text-input"
+          type="password"
+          value={secret}
+          onChange={e=>
+           setSecret(e.target.value)
+          }
+          placeholder="Paste credential"
+          autoComplete="off"
+         />
+
+        </label>
+
+        <div className="modal-actions">
+
+         <button
+          className="secondary"
+          onClick={close}
+         >
+          Cancel
+         </button>
+
+         <button
+          className="primary"
+          disabled={!secret}
+          onClick={()=>
+           configure(
+            p,
+            secret
+           )
+          }
+         >
+          Save & connect
+         </button>
+
+        </div>
+
+       </>
+       :
+       <div className="modal-actions">
+
+        <button
+         className="secondary"
+         onClick={close}
+        >
+         Cancel
+        </button>
+
+        <button
+         className="primary"
+         onClick={()=>
+          connect(p)
+         }
+        >
+         Continue to {p.vendor}
+         <ExternalLink size={15}/>
+        </button>
+
+       </div>
+      }
+
+     </>
+    }
+
+   </div>
+
+  </div>
+ );
 }
 
 function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  full = false
-}) {
-  return (
-    <div className={full ? "full-field" : ""}>
-      <label>{label}</label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-    </div>
-  );
+ label,
+ value,
+ onChange,
+ placeholder=''
+}){
+
+ return (
+  <label className="field">
+
+   <span>
+    {label}
+   </span>
+
+   <input
+    className="text-input"
+    value={value??''}
+    onChange={e=>
+     onChange(
+      e.target.value
+     )
+    }
+    placeholder={placeholder}
+   />
+
+  </label>
+ );
 }
 
-createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+function SetupWizard({
+ complete,
+ health
+}){
+
+ const [step,setStep]=useState(0);
+
+ const [name,setName]=useState(
+  'SignalOS Workspace'
+ );
+
+ const [mode,setMode]=useState(
+  'copilot'
+ );
+
+ const steps=[
+  [
+   'Welcome to SignalOS',
+   'Complete this one-time setup before any workspace data or automation is accessible.'
+  ],
+  [
+   'Workspace',
+   'Choose the workspace identity and the default AI operating mode.'
+  ],
+  [
+   'Connect your stack',
+   'After setup, connect your AI/LLM, email, calendar, CRM and data providers from the Integrations marketplace.'
+  ],
+  [
+   'Safety & finish',
+   'Automation starts OFF. Nothing sends until you connect the required providers and explicitly enable execution.'
+  ]
+ ];
+
+ const next=()=>{
+
+  if(
+   step<
+   steps.length-1
+  ){
+
+   setStep(
+    step+1
+   );
+
+  }else{
+
+   complete({
+    name,
+    owner_name:
+     'Workspace Owner',
+    ai_mode:
+     mode,
+    timezone:
+     'Asia/Kolkata'
+   });
+
+  }
+ };
+
+ return (
+  <div className="onboarding-lock">
+
+   <div className="setup-card">
+
+    <div className="setup-side">
+
+     <div className="setup-brand">
+
+      <div className="brand-mark">
+       S
+      </div>
+
+      <div>
+
+       <b>
+        SignalOS
+       </b>
+
+       <small>
+        AI Prospecting & Outbound OS
+       </small>
+
+      </div>
+
+     </div>
+
+     <div className="setup-steps">
+
+      {steps.map(
+       (item,index)=>
+
+        <div
+         key={item[0]}
+         className={
+          index===step
+          ?'current'
+          :index<step
+          ?'done'
+          :''
+         }
+        >
+
+         <span>
+
+          {
+           index<step
+           ?<Check size={13}/>
+           :index+1
+          }
+
+         </span>
+
+         <div>
+
+          <b>
+           {item[0]}
+          </b>
+
+          <small>
+           {item[1]}
+          </small>
+
+         </div>
+
+        </div>
+      )}
+
+     </div>
+
+    </div>
+
+    <div className="setup-main">
+
+     <div className="setup-top">
+
+      <span>
+       MANDATORY SETUP
+      </span>
+
+      <small>
+       API {health}
+      </small>
+
+     </div>
+
+     <h1>
+      {steps[step][0]}
+     </h1>
+
+     <p>
+      {steps[step][1]}
+     </p>
+
+     {step===0&&
+      <div className="setup-callout">
+
+       <Sparkles size={24}/>
+
+       <div>
+
+        <b>
+         One workspace. One source of truth.
+        </b>
+
+        <p>
+         Prospecting, intent, outbound,
+         AI, integrations and controls
+         live together.
+        </p>
+
+       </div>
+
+      </div>
+     }
+
+     {step===1&&
+      <>
+
+       <Field
+        label="Workspace name"
+        value={name}
+        onChange={setName}
+       />
+
+       <div className="setup-modes">
+
+        {[
+         [
+          'manual',
+          'Manual',
+          'Approval required'
+         ],
+         [
+          'copilot',
+          'Copilot',
+          'AI drafts; you approve'
+         ],
+         [
+          'autopilot',
+          'Autopilot',
+          'Execute within limits'
+         ]
+        ].map(
+         ([id,title,description])=>
+
+          <button
+           key={id}
+           className={
+            mode===id
+            ?'mode-card selected'
+            :'mode-card'
+           }
+           onClick={()=>
+            setMode(id)
+           }
+          >
+
+           <div className="mode-radio">
+
+            {mode===id&&
+             <span/>
+            }
+
+           </div>
+
+           <div>
+
+            <b>
+             {title}
+            </b>
+
+            <small>
+             {description}
+            </small>
+
+           </div>
+
+          </button>
+        )}
+
+       </div>
+
+      </>
+     }
+
+     {step===2&&
+      <div className="setup-grid">
+
+       <div>
+        <Mail/>
+        <b>Email</b>
+        <span>
+         Gmail, Microsoft 365, Resend,
+         SendGrid, Mailgun
+        </span>
+       </div>
+
+       <div>
+        <Sparkles/>
+        <b>AI / LLM</b>
+        <span>
+         OpenAI, Claude, Gemini,
+         OpenRouter
+        </span>
+       </div>
+
+       <div>
+        <Calendar/>
+        <b>Calendar</b>
+        <span>
+         Google Calendar, Outlook,
+         Calendly
+        </span>
+       </div>
+
+       <div>
+        <Link2/>
+        <b>CRM & Data</b>
+        <span>
+         HubSpot, Salesforce, Apollo,
+         Hunter and more
+        </span>
+       </div>
+
+      </div>
+     }
+
+     {step===3&&
+      <div className="setup-callout success">
+
+       <ShieldCheck size={24}/>
+
+       <div>
+
+        <b>
+         Safe by default
+        </b>
+
+        <p>
+         Completing setup does not connect
+         any account and does not enable
+         automation. You choose providers
+         yourself from Integrations.
+        </p>
+
+       </div>
+
+      </div>
+     }
+
+     <div className="setup-actions">
+
+      {step>0&&
+       <button
+        className="secondary"
+        onClick={()=>
+         setStep(step-1)
+        }
+       >
+        Back
+       </button>
+      }
+
+      <button
+       className="primary"
+       disabled={
+        step===1
+        &&
+        !name.trim()
+       }
+       onClick={next}
+      >
+
+       {
+        step===steps.length-1
+        ?'Enter SignalOS'
+        :'Continue'
+       }
+
+       <ArrowRight size={15}/>
+
+      </button>
+
+     </div>
+
+    </div>
+
+   </div>
+
+  </div>
+ );
+}
+
+function Tour({
+ step,
+ setStep,
+ close
+}){
+
+ const slides=[
+  [
+   'Command center',
+   'Overview shows live workspace counts and stack health.'
+  ],
+  [
+   'Integrations',
+   'Choose the tools your team already uses. OAuth providers open official login; API providers use secure credentials.'
+  ],
+  [
+   'Automation',
+   'Manual, Copilot and Autopilot are persisted. The master switch is OFF until you explicitly enable it.'
+  ],
+  [
+   'Campaigns',
+   'Create, open, review, activate and pause campaigns. Backend checks protect activation.'
+  ]
+ ];
+
+ const current=
+  slides[step];
+
+ return (
+  <div className="tour-backdrop">
+
+   <div className="tour">
+
+    <div className="tour-visual">
+
+     <div className="tour-orb">
+      <Sparkles size={28}/>
+     </div>
+
+    </div>
+
+    <div className="tour-content">
+
+     <div className="tour-top">
+
+      <span>
+       PRODUCT TOUR · {step+1}/4
+      </span>
+
+      <button
+       onClick={close}
+      >
+       Skip
+      </button>
+
+     </div>
+
+     <h2>
+      {current[0]}
+     </h2>
+
+     <p>
+      {current[1]}
+     </p>
+
+     <div className="tour-actions">
+
+      <button
+       className="secondary"
+       disabled={step===0}
+       onClick={()=>
+        setStep(step-1)
+       }
+      >
+       Back
+      </button>
+
+      {step<3
+       ?
+       <button
+        className="primary"
+        onClick={()=>
+         setStep(step+1)
+        }
+       >
+        Next
+        <ArrowRight size={15}/>
+       </button>
+       :
+       <button
+        className="primary"
+        onClick={close}
+       >
+        Finish
+        <Check size={15}/>
+       </button>
+      }
+
+     </div>
+
+    </div>
+
+   </div>
+
+  </div>
+ );
+}
+
+function Empty({
+ title,
+ text
+}){
+
+ return (
+  <div className="inline-empty">
+
+   <FileText size={21}/>
+
+   <b>
+    {title}
+   </b>
+
+   <span>
+    {text}
+   </span>
+
+  </div>
+ );
+}
+
+createRoot(
+ document.getElementById('root')
+).render(
+ <App/>
 );
